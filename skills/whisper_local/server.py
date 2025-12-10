@@ -22,7 +22,7 @@ class WhisperTranscribeArgs(BaseModel):
     audio_file: str = Field(description="Path to audio file (MP3, WAV, M4A)")
     output_dir: Optional[str] = Field(default=None, description="Output directory (default: same as input)")
     language: str = Field(default="en", description="Language code: en, he, es, etc.")
-    model: str = Field(default="base", description="Whisper model: base, small, medium, large")
+    model: str = Field(default="base", description="Whisper model: base, small, medium, large, turbo")
     output_format: str = Field(default="txt", description="Output format: txt, srt, vtt, json")
 
 @server.list_tools()
@@ -91,8 +91,8 @@ def do_whisper_transcribe(args: WhisperTranscribeArgs) -> str:
     start_time = time.time()
     start_dt = datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')
     
-    # 30 minute timeout for transcription
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    # 60 minute timeout for transcription
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
 
     end_time = time.time()
     end_dt = datetime.fromtimestamp(end_time).strftime('%Y-%m-%d %H:%M:%S')
