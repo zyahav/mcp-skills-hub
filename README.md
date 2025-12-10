@@ -77,6 +77,21 @@ The Hub is designed to be easily extensible. To add a new skill:
 
 4.  **Restart Claude Desktop**. The new tool will appear automatically!
 
+## 🧪 Testing & Verification
+
+We include a regression test suite to verify that all skills are working correctly.
+
+### Running Tests Manually
+```bash
+python3 -m unittest tests/test_skills.py
+```
+
+### Watch Mode (Recommended for Development)
+To automatically run tests whenever you change a file:
+```bash
+./watch_tests.sh
+```
+
 ## 🐛 Debugging
 
 Logs are written to `hub_debug.log` in the root directory.
