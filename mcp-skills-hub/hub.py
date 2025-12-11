@@ -35,6 +35,7 @@ server = Server(SERVER_NAME)
 PROCESSES: Dict[str, asyncio.subprocess.Process] = {}
 MANIFESTS: Dict[str, dict] = {}
 TOOL_MAPPING: Dict[str, str] = {} # tool_name -> skill_name
+SKILL_LOCKS: Dict[str, asyncio.Lock] = {}  # Lock per skill to prevent concurrent access
 
 # Event to signal that skills are ready
 STARTUP_EVENT = asyncio.Event()
@@ -98,70 +99,80 @@ async def spawn_skill(skill_dir: Path, manifest_path: Path):
 
         PROCESSES[name] = process
         MANIFESTS[name] = manifest
+        SKILL_LOCKS[name] = asyncio.Lock()  # Create lock for this skill
     except Exception as e:
         print(f"Failed to load skill {skill_dir.name}: {e}", file=sys.stderr)
 
 async def initialize_skill_process(name: str, proc: asyncio.subprocess.Process):
     """Perform MCP handshake with a skill process"""
-    try:
-        # 1. Initialize
-        init_req = {
-            "jsonrpc": "2.0",
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05", # Updated protocol version
-                "capabilities": {},
-                "clientInfo": {"name": "skills-hub", "version": "1.0"}
-            },
-            "id": 0
-        }
-        proc.stdin.write((json.dumps(init_req) + "\n").encode('utf-8'))
-        await proc.stdin.drain()
-        
-        # 2. Await response
-        line = await proc.stdout.readline()
-        if not line:
-            print(f"Skill {name} failed to respond to initialize", file=sys.stderr)
-            return False
-            
-        resp = json.loads(line.decode('utf-8'))
-        if "error" in resp:
-            print(f"Skill {name} initialization error: {resp['error']}", file=sys.stderr)
-            return False
-            
-        # 3. Send initialized notification
-        proc.stdin.write((json.dumps({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-            "params": {}
-        }) + "\n").encode('utf-8'))
-        await proc.stdin.drain()
-        
-        print(f"Skill {name} initialized successfully", file=sys.stderr)
-        return True
-    except Exception as e:
-        print(f"Error initializing skill {name}: {e}", file=sys.stderr)
+    lock = SKILL_LOCKS.get(name)
+    if not lock:
         return False
+    
+    async with lock:
+        try:
+            # 1. Initialize
+            init_req = {
+                "jsonrpc": "2.0",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05", # Updated protocol version
+                    "capabilities": {},
+                    "clientInfo": {"name": "skills-hub", "version": "1.0"}
+                },
+                "id": 0
+            }
+            proc.stdin.write((json.dumps(init_req) + "\n").encode('utf-8'))
+            await proc.stdin.drain()
+            
+            # 2. Await response
+            line = await proc.stdout.readline()
+            if not line:
+                print(f"Skill {name} failed to respond to initialize", file=sys.stderr)
+                return False
+                
+            resp = json.loads(line.decode('utf-8'))
+            if "error" in resp:
+                print(f"Skill {name} initialization error: {resp['error']}", file=sys.stderr)
+                return False
+                
+            # 3. Send initialized notification
+            proc.stdin.write((json.dumps({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+                "params": {}
+            }) + "\n").encode('utf-8'))
+            await proc.stdin.drain()
+            
+            print(f"Skill {name} initialized successfully", file=sys.stderr)
+            return True
+        except Exception as e:
+            print(f"Error initializing skill {name}: {e}", file=sys.stderr)
+            return False
 
 async def populate_tool_mapping():
     """Populate TOOL_MAPPING by listing tools from all skills"""
     TOOL_MAPPING.clear()
     for name, proc in list(PROCESSES.items()):
-        try:
-            request = {"jsonrpc": "2.0", "method": "tools/list", "id": 1}
-            proc.stdin.write((json.dumps(request) + "\n").encode('utf-8'))
-            await proc.stdin.drain()
-            
-            line = await proc.stdout.readline()
-            if line:
-                response = json.loads(line.decode('utf-8'))
-                if "result" in response:
-                    skill_tools = response["result"].get("tools", [])
-                    for t in skill_tools:
-                        tool_obj = Tool(**t)
-                        TOOL_MAPPING[tool_obj.name] = name
-        except Exception as e:
-                print(f"Error listing tools for {name}: {e}", file=sys.stderr)
+        lock = SKILL_LOCKS.get(name)
+        if not lock:
+            continue
+        async with lock:
+            try:
+                request = {"jsonrpc": "2.0", "method": "tools/list", "id": 1}
+                proc.stdin.write((json.dumps(request) + "\n").encode('utf-8'))
+                await proc.stdin.drain()
+                
+                line = await proc.stdout.readline()
+                if line:
+                    response = json.loads(line.decode('utf-8'))
+                    if "result" in response:
+                        skill_tools = response["result"].get("tools", [])
+                        for t in skill_tools:
+                            tool_obj = Tool(**t)
+                            TOOL_MAPPING[tool_obj.name] = name
+            except Exception as e:
+                    print(f"Error listing tools for {name}: {e}", file=sys.stderr)
 
 async def proxy_list_tools():
     # Wait for startup to complete
@@ -170,32 +181,36 @@ async def proxy_list_tools():
     tools = []
     # Using list() to iterate copy safe
     for name, proc in list(PROCESSES.items()):
-        try:
-            request = {
-                "jsonrpc": "2.0",
-                "method": "tools/list",
-                "id": 1
-            }
-            if proc.returncode is not None:
-                print(f"Skill {name} is dead. Restarting logic needed.", file=sys.stderr)
-                continue
+        lock = SKILL_LOCKS.get(name)
+        if not lock:
+            continue
+        async with lock:
+            try:
+                request = {
+                    "jsonrpc": "2.0",
+                    "method": "tools/list",
+                    "id": 1
+                }
+                if proc.returncode is not None:
+                    print(f"Skill {name} is dead. Restarting logic needed.", file=sys.stderr)
+                    continue
 
-            proc.stdin.write((json.dumps(request) + "\n").encode('utf-8'))
-            await proc.stdin.drain()
-            
-            line = await proc.stdout.readline()
-            if not line:
-                continue
+                proc.stdin.write((json.dumps(request) + "\n").encode('utf-8'))
+                await proc.stdin.drain()
                 
-            response = json.loads(line.decode('utf-8'))
-            if "error" in response:
-                continue
-                
-            for t in response.get("result", {}).get("tools", []):
-                tools.append(Tool(**t))
-                
-        except Exception as e:
-            print(f"Error communicating with skill {name}: {e}", file=sys.stderr)
+                line = await proc.stdout.readline()
+                if not line:
+                    continue
+                    
+                response = json.loads(line.decode('utf-8'))
+                if "error" in response:
+                    continue
+                    
+                for t in response.get("result", {}).get("tools", []):
+                    tools.append(Tool(**t))
+                    
+            except Exception as e:
+                print(f"Error communicating with skill {name}: {e}", file=sys.stderr)
             
     return tools
 
@@ -214,8 +229,9 @@ async def call_tool(name: str, arguments: dict):
         skill_name = name
         
     proc = PROCESSES.get(skill_name)
+    lock = SKILL_LOCKS.get(skill_name)
     
-    if not proc:
+    if not proc or not lock:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
     request = {
@@ -225,21 +241,22 @@ async def call_tool(name: str, arguments: dict):
         "id": 1
     }
 
-    try:
-        proc.stdin.write((json.dumps(request) + "\n").encode('utf-8'))
-        await proc.stdin.drain()
+    async with lock:
+        try:
+            proc.stdin.write((json.dumps(request) + "\n").encode('utf-8'))
+            await proc.stdin.drain()
 
-        line = await proc.stdout.readline()
-        if not line:
-             return [TextContent(type="text", text="Error: Empty response from skill")]
-             
-        response = json.loads(line.decode('utf-8'))
-        if "error" in response:
-            return [TextContent(type="text", text=f"Error from skill: {response['error']}")]
-            
-        return response.get("result", {}).get("content", [])
-    except Exception as e:
-        return [TextContent(type="text", text=f"Error communicating with skill: {str(e)}")]
+            line = await proc.stdout.readline()
+            if not line:
+                 return [TextContent(type="text", text="Error: Empty response from skill")]
+                 
+            response = json.loads(line.decode('utf-8'))
+            if "error" in response:
+                return [TextContent(type="text", text=f"Error from skill: {response['error']}")]
+                
+            return response.get("result", {}).get("content", [])
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error communicating with skill: {str(e)}")]
 
 
 async def main():
