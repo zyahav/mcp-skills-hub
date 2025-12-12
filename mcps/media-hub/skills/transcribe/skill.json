@@ -1,0 +1,9 @@
+{
+    "name": "transcribe",
+    "description": "Transcribe audio/video to text with timestamps. Models: tiny (~10x speed), base (default ~1.5x), small/medium/large (more accurate). Formats: MP3/MP4/WAV/M4A/FLAC/OGG/WEBM. Output: txt/srt/vtt/json. Auto-compresses large files.",
+    "command": [
+        "python3",
+        "server.py"
+    ],
+    "timeout": 3600
+}

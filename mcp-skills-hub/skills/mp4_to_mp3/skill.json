@@ -1,7 +1,0 @@
-{
-    "name": "mp4_to_mp3",
-    "command": [
-        "python3",
-        "server.py"
-    ]
-}

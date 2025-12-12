@@ -44,6 +44,7 @@ echo "Launching MCPs for agent: $AGENT_NAME" >&2
 for row in $(echo "$ALLOWED_MCPS" | jq -c '.[]'); do
   MCP_ID=$(echo "$row" | jq -r '.id')
   ARGS=$(echo "$row" | jq -r '.args // [] | join(" ")')
+  MCP_ENV=$(echo "$row" | jq -r '.env // {} | to_entries | .[] | "\(.key)=\(.value)"')
   MCP_PATH="$MCPS_DIR/$MCP_ID"
   
   # Determine command to launch MCP
@@ -52,15 +53,29 @@ for row in $(echo "$ALLOWED_MCPS" | jq -c '.[]'); do
       CMD=("$WRAPPER" $ARGS)
   elif [[ -f "$MCP_PATH/server.py" ]]; then
       CMD=(python3 "$MCP_PATH/server.py" $ARGS)
+  elif [[ -f "$MCP_PATH/hub.py" ]]; then
+      CMD=(python3 "$MCP_PATH/hub.py" $ARGS)
   else
       echo "Warning: No launcher found for MCP $MCP_ID at $MCP_PATH" >&2
       continue
   fi
 
   echo "Starting $MCP_ID..." >&2
-  # Launch in background and redirect specific output if needed, or just let it handle its own logging
-  # For now, capturing stderr to log file for debugging
-  "${CMD[@]}" >> "$LOG" 2>&1 &
+  
+  # Build env array for MCP-specific environment variables
+  MCP_ENV_CMD=()
+  if [[ -n "$MCP_ENV" ]]; then
+      while IFS= read -r envvar; do
+          [[ -n "$envvar" ]] && MCP_ENV_CMD+=("$envvar")
+      done <<< "$MCP_ENV"
+  fi
+  
+  # Launch with MCP-specific env vars (or without if empty)
+  if [[ ${#MCP_ENV_CMD[@]} -gt 0 ]]; then
+      env "${MCP_ENV_CMD[@]}" "${CMD[@]}" >> "$LOG" 2>&1 &
+  else
+      "${CMD[@]}" >> "$LOG" 2>&1 &
+  fi
   PID=$!
   
   # Add PID to registry

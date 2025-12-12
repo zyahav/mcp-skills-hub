@@ -1,0 +1,9 @@
+{
+    "name": "tiktok_download-ok",
+    "description": "Download TikTok videos as MP4 or MP3",
+    "command": [
+        "python3",
+        "server.py"
+    ],
+    "timeout": 600
+}

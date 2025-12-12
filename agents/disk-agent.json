@@ -1,26 +1,13 @@
 {
     "name": "disk-agent",
-    "description": "High-risk disk operations",
+    "description": "High-risk disk operations only",
     "allowed_mcps": [
         {
             "id": "disk-manager",
-            "args": [
-                "--write-enabled"
-            ],
-            "env": {
-                "DISK_MODE": "full"
-            }
-        },
-        {
-            "id": "media-hub",
-            "args": [],
-            "env": {}
+            "args": ["--write-enabled"],
+            "env": {"DISK_MODE": "full"}
         }
     ],
-    "env_allowlist": [
-        "HOME",
-        "USER",
-        "PATH"
-    ],
+    "env_allowlist": ["HOME", "USER", "PATH"],
     "transport_preference": "stdio"
 }

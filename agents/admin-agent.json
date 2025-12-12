@@ -9,19 +9,15 @@
         },
         {
             "id": "disk-manager",
-            "args": [
-                "--write-enabled"
-            ],
-            "env": {
-                "DISK_MODE": "full"
-            }
+            "args": ["--write-enabled"],
+            "env": {"DISK_MODE": "full"}
+        },
+        {
+            "id": "git-manager",
+            "args": [],
+            "env": {}
         }
     ],
-    "env_allowlist": [
-        "HOME",
-        "USER",
-        "PATH",
-        "GEMINI_API_KEY"
-    ],
+    "env_allowlist": ["HOME", "USER", "PATH", "GEMINI_API_KEY"],
     "transport_preference": "stdio"
 }

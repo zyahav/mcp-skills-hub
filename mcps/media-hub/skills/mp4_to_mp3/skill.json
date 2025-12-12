@@ -1,0 +1,9 @@
+{
+    "name": "mp4_to_mp3",
+    "description": "Convert MP4 video to MP3 audio using ffmpeg",
+    "command": [
+        "python3",
+        "server.py"
+    ],
+    "timeout": 300
+}

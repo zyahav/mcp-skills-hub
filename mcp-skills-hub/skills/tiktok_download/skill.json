@@ -1,7 +1,0 @@
-{
-    "name": "tiktok_download",
-    "command": [
-        "python3",
-        "server.py"
-    ]
-}

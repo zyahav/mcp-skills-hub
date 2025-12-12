@@ -1,7 +1,9 @@
 {
     "name": "youtube_download",
+    "description": "Download YouTube videos as MP4 or MP3",
     "command": [
         "python3",
         "server.py"
-    ]
+    ],
+    "timeout": 600
 }

@@ -1,0 +1,9 @@
+{
+    "name": "media_hub",
+    "description": "Media processing hub: YouTube download, MP4 to MP3 conversion, transcription (Whisper), video snapshots, TikTok download.",
+    "command": [
+        "python3",
+        "hub.py"
+    ],
+    "timeout": 300
+}

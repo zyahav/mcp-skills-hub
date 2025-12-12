@@ -1,5 +1,6 @@
 {
     "name": "video_snapshot",
+    "description": "Extract a still image frame from a video at a specific timestamp",
     "command": [
         "python3",
         "server.py"

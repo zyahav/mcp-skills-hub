@@ -1,0 +1,17 @@
+{
+    "name": "git_manager",
+    "description": "Git worktree management: create/delete feature branches, merge features to dev, release merges to main, tagging, env sync.",
+    "tools": [
+        "list_worktrees - List all worktrees with branches",
+        "get_status - Git status for a worktree",
+        "create_feature - Create feature branch + worktree from dev",
+        "delete_feature - Delete feature worktree and branch",
+        "merge_feature - Merge feature into dev (optional push/delete)",
+        "release_merge - Merge dev into main (ff-only by default)",
+        "tag_release - Create and push version tag on main",
+        "sync_env - Copy .env from dev to all feature worktrees",
+        "pull_all - Pull latest in all worktrees"
+    ],
+    "command": ["python3", "server.py"],
+    "timeout": 120
+}
