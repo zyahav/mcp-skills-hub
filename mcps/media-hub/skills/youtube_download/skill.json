@@ -1,0 +1,7 @@
+{
+    "name": "youtube_download",
+    "command": [
+        "python3",
+        "server.py"
+    ]
+}

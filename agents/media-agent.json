@@ -1,0 +1,13 @@
+{
+  "name": "media-agent",
+  "description": "Low-risk media operations (YouTube, Whisper, Snapshot)",
+  "allowed_mcps": [
+    {
+      "id": "media-hub",
+      "args": [],
+      "env": {}
+    }
+  ],
+  "env_allowlist": ["HOME", "USER", "PATH", "GEMINI_API_KEY"],
+  "transport_preference": "stdio"
+}

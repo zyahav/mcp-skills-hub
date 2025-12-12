@@ -1,19 +1,20 @@
 # MCP Skills Hub - Handoff Document
 
 **Last Updated:** December 11, 2025
-**Status:** 🟡 RESTRUCTURE IN PROGRESS
+**Status:** 🟢 RESTRUCTURE COMPLETE
 
 ---
 
 ## 🎯 NEXT STEP (Start Here)
 
-**Restructure repo from single hub to domain-separated MCPs:**
+**See [WALKTHROUGH.md](WALKTHROUGH.md) for full details on the new architecture.**
 
-1. Rename `mcp-skills-hub/` → `media-hub/`
-2. Move `disk_manager/` out to `mcps/disk-manager/` (standalone MCP)
-3. Create `agents/` folder with agent definitions
-4. Update Gemini `~/.gemini/settings.json` with both MCPs
-5. Test with `gemini --allowed-mcp-server-names media-hub`
+The repo has been restructured:
+1. `mcps/media-hub/` (formerly `mcp-skills-hub/`)
+2. `mcps/disk-manager/` (standalone)
+3. `agents/` (capability definitions)
+
+Update your `~/.gemini/settings.json` using the instructions in `WALKTHROUGH.md`.
 
 ---
 

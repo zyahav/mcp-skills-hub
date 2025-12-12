@@ -1,0 +1,26 @@
+{
+    "name": "disk-agent",
+    "description": "High-risk disk operations",
+    "allowed_mcps": [
+        {
+            "id": "disk-manager",
+            "args": [
+                "--write-enabled"
+            ],
+            "env": {
+                "DISK_MODE": "full"
+            }
+        },
+        {
+            "id": "media-hub",
+            "args": [],
+            "env": {}
+        }
+    ],
+    "env_allowlist": [
+        "HOME",
+        "USER",
+        "PATH"
+    ],
+    "transport_preference": "stdio"
+}

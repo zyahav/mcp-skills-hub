@@ -1,0 +1,7 @@
+{
+    "name": "transcribe",
+    "command": [
+        "python3",
+        "server.py"
+    ]
+}

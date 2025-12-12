@@ -1,0 +1,27 @@
+{
+    "name": "admin-agent",
+    "description": "Full access to all MCPs",
+    "allowed_mcps": [
+        {
+            "id": "media-hub",
+            "args": [],
+            "env": {}
+        },
+        {
+            "id": "disk-manager",
+            "args": [
+                "--write-enabled"
+            ],
+            "env": {
+                "DISK_MODE": "full"
+            }
+        }
+    ],
+    "env_allowlist": [
+        "HOME",
+        "USER",
+        "PATH",
+        "GEMINI_API_KEY"
+    ],
+    "transport_preference": "stdio"
+}

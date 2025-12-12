@@ -28,7 +28,7 @@ logging.info(f"Path: {sys.path}")
 
 ROOT = Path(__file__).parent
 SKILLS_DIR = ROOT / "skills"
-SERVER_NAME = "skills-hub"
+SERVER_NAME = "media-hub"
 
 server = Server(SERVER_NAME)
 

@@ -1,0 +1,7 @@
+{
+    "name": "video_snapshot",
+    "command": [
+        "python3",
+        "server.py"
+    ]
+}
