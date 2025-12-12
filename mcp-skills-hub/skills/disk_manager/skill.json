@@ -1,0 +1,9 @@
+{
+    "name": "disk_manager",
+    "description": "Complete disk management: monitor usage, scan junk, cleanup with permission, manage app approvals. Tools: get_disk_status, scan_junk, get_procedures, get_emergency_workflow, execute_cleanup, get_app_status, approve_app, get_history",
+    "command": [
+        "python3",
+        "server.py"
+    ],
+    "timeout": 300
+}
