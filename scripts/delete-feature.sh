@@ -8,9 +8,8 @@ set -e
 # Get directory of this script (scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_WORKTREE="$SCRIPT_DIR/.."
-MONOREPO_ROOT="$(cd "$CURRENT_WORKTREE/.." && pwd)"
 
-cd "$MONOREPO_ROOT"
+cd "$CURRENT_WORKTREE"
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <feature-name>"
@@ -19,7 +18,7 @@ fi
 
 FEATURE_NAME="$1"
 BRANCH_NAME="feature/$FEATURE_NAME"
-WORKTREE_DIR="$MONOREPO_ROOT/feature-$FEATURE_NAME"
+WORKTREE_DIR="$CURRENT_WORKTREE/feature-$FEATURE_NAME"
 
 echo "🗑️  Deleting feature: $FEATURE_NAME"
 

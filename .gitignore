@@ -38,6 +38,12 @@ hub_debug.log
 # VS Code
 .vscode/
 
+# Environment Variables
+.env
+
+# Feature Worktrees (Nested)
+feature-*/
+
 # MacOS
 .DS_Store
 .env

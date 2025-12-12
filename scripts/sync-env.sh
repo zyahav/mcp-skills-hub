@@ -8,7 +8,6 @@ set -e
 # Get directory of this script (scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CURRENT_WORKTREE="$SCRIPT_DIR/.."
-MONOREPO_ROOT="$(cd "$CURRENT_WORKTREE/.." && pwd)"
 
 # We are copy FROM the current worktree's .env (dev environment)
 if [ ! -f "$CURRENT_WORKTREE/.env" ]; then
@@ -16,9 +15,9 @@ if [ ! -f "$CURRENT_WORKTREE/.env" ]; then
     exit 1
 fi
 
-cd "$MONOREPO_ROOT"
+cd "$CURRENT_WORKTREE"
 
-echo "🔄 Syncing .env from dev to worktrees..."
+echo "🔄 Syncing .env from dev to nested worktrees..."
 
 # Find all directories starting with feature-
 found=0

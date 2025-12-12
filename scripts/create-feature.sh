@@ -12,10 +12,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The current worktree root (mcp-skills-hub-dev)
 CURRENT_WORKTREE="$SCRIPT_DIR/.."
 
-# The parent directory (mcp-skills-hub-monorepo) where new worktrees will go
-MONOREPO_ROOT="$(cd "$CURRENT_WORKTREE/.." && pwd)"
+# We create worktrees inside the current worktree (nested)
+TARGET_ROOT="$CURRENT_WORKTREE"
 
-cd "$MONOREPO_ROOT"
+cd "$TARGET_ROOT"
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <feature-name>"
@@ -25,7 +25,7 @@ fi
 
 FEATURE_NAME="$1"
 BRANCH_NAME="feature/$FEATURE_NAME"
-WORKTREE_DIR="$MONOREPO_ROOT/feature-$FEATURE_NAME"
+WORKTREE_DIR="$TARGET_ROOT/feature-$FEATURE_NAME"
 
 # Check if already exists
 if [ -d "$WORKTREE_DIR" ]; then
