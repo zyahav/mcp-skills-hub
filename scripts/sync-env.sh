@@ -4,21 +4,27 @@
 
 set -e
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
 
-if [ ! -f ".env" ]; then
-    echo "❌ No .env file found in root!"
+# Get directory of this script (scripts/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CURRENT_WORKTREE="$SCRIPT_DIR/.."
+MONOREPO_ROOT="$(cd "$CURRENT_WORKTREE/.." && pwd)"
+
+# We are copy FROM the current worktree's .env (dev environment)
+if [ ! -f "$CURRENT_WORKTREE/.env" ]; then
+    echo "❌ No .env file found in $CURRENT_WORKTREE!"
     exit 1
 fi
 
-echo "🔄 Syncing .env to worktrees..."
+cd "$MONOREPO_ROOT"
+
+echo "🔄 Syncing .env from dev to worktrees..."
 
 # Find all directories starting with feature-
 found=0
 for dir in feature-*/; do
     if [ -d "$dir" ]; then
-        cp ".env" "${dir}.env"
+        cp "$CURRENT_WORKTREE/.env" "${dir}.env"
         echo "✅ Updated ${dir}.env"
         found=1
     fi

@@ -5,8 +5,17 @@
 
 set -e
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+
+# Get directory of this script (scripts/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# The current worktree root (mcp-skills-hub-dev)
+CURRENT_WORKTREE="$SCRIPT_DIR/.."
+
+# The parent directory (mcp-skills-hub-monorepo) where new worktrees will go
+MONOREPO_ROOT="$(cd "$CURRENT_WORKTREE/.." && pwd)"
+
+cd "$MONOREPO_ROOT"
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <feature-name>"
@@ -16,7 +25,7 @@ fi
 
 FEATURE_NAME="$1"
 BRANCH_NAME="feature/$FEATURE_NAME"
-WORKTREE_DIR="$REPO_ROOT/feature-$FEATURE_NAME"
+WORKTREE_DIR="$MONOREPO_ROOT/feature-$FEATURE_NAME"
 
 # Check if already exists
 if [ -d "$WORKTREE_DIR" ]; then
@@ -26,12 +35,14 @@ fi
 
 # Create branch from dev and worktree
 echo "📦 Creating feature branch: $BRANCH_NAME"
+# We run git worktree add from the current worktree (or root), git handles the linking.
+# We specify the full path for the new worktree.
 git worktree add "$WORKTREE_DIR" -b "$BRANCH_NAME" dev
 
-# Copy .env if exists
-if [ -f "$REPO_ROOT/.env" ]; then
-    cp "$REPO_ROOT/.env" "$WORKTREE_DIR/.env"
-    echo "✅ Copied .env to worktree"
+# Copy .env from CURRENT_WORKTREE (dev environment) if exists
+if [ -f "$CURRENT_WORKTREE/.env" ]; then
+    cp "$CURRENT_WORKTREE/.env" "$WORKTREE_DIR/.env"
+    echo "✅ Copied .env from dev to worktree"
 fi
 
 echo ""

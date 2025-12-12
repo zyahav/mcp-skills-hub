@@ -2,8 +2,13 @@
 # list-features.sh - Show all active worktrees and branches
 # Usage: ./scripts/list-features.sh
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+
+# Get directory of this script (scripts/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CURRENT_WORKTREE="$SCRIPT_DIR/.."
+MONOREPO_ROOT="$(cd "$CURRENT_WORKTREE/.." && pwd)"
+
+cd "$MONOREPO_ROOT"
 
 echo "=== WORKTREES ==="
 git worktree list
