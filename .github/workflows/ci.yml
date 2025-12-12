@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate Structure & Syntax
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mcp pydantic
+
+      - name: Validate JSON files
+        run: |
+          echo "=== Validating JSON files ==="
+          for f in $(find . -name "*.json" -type f); do
+            echo "Checking $f"
+            python -c "import json; json.load(open('$f'))" || exit 1
+          done
+          echo "✅ All JSON files valid"
+
+      - name: Validate Python syntax
+        run: |
+          echo "=== Validating Python syntax ==="
+          for f in $(find ./mcps -name "*.py" -type f); do
+            echo "Checking $f"
+            python -m py_compile "$f" || exit 1
+          done
+          echo "✅ All Python files valid"
+
+      - name: Validate wrapper scripts
+        run: |
+          echo "=== Validating shell scripts ==="
+          for f in $(find ./mcps -name "wrapper.sh" -type f); do
+            echo "Checking $f"
+            bash -n "$f" || exit 1
+          done
+          bash -n ./launch/agent-launcher.sh || exit 1
+          echo "✅ All shell scripts valid"
+
+      - name: Validate agent definitions
+        run: |
+          echo "=== Validating agent definitions ==="
+          python << 'EOF'
+          import json
+          import os
+          from pathlib import Path
+
+          agents_dir = Path("agents")
+          mcps_dir = Path("mcps")
+          errors = []
+
+          # Get available MCPs
+          available_mcps = set()
+          if mcps_dir.exists():
+              for mcp in mcps_dir.iterdir():
+                  if mcp.is_dir():
+                      available_mcps.add(mcp.name)
+
+          print(f"Available MCPs: {available_mcps}")
+
+          # Validate each agent
+          for agent_file in agents_dir.glob("*.json"):
+              print(f"Checking {agent_file}")
+              with open(agent_file) as f:
+                  agent = json.load(f)
+              
+              # Required fields
+              for field in ["name", "allowed_mcps", "env_allowlist"]:
+                  if field not in agent:
+                      errors.append(f"{agent_file}: missing required field '{field}'")
+              
+              # Check MCP references
+              for mcp in agent.get("allowed_mcps", []):
+                  mcp_id = mcp.get("id")
+                  if mcp_id not in available_mcps:
+                      errors.append(f"{agent_file}: references unknown MCP '{mcp_id}'")
+
+          if errors:
+              print("\n❌ Validation errors:")
+              for e in errors:
+                  print(f"  - {e}")
+              exit(1)
+          
+          print("✅ All agent definitions valid")
+          EOF
+
+  test-mcps:
+    name: Test MCP Servers
+    runs-on: ubuntu-latest
+    needs: validate
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mcp pydantic
+
+      - name: Test MCP imports
+        run: |
+          echo "=== Testing MCP server imports ==="
+          
+          # Test disk-manager
+          echo "Testing disk-manager..."
+          cd mcps/disk-manager
+          python -c "from server import server; print('disk-manager: OK')"
+          cd ../..
+          
+          # Test git-manager  
+          echo "Testing git-manager..."
+          cd mcps/git-manager
+          python -c "from server import server, TOOLS; print(f'git-manager: {len(TOOLS)} tools')"
+          cd ../..
+          
+          # Test media-hub
+          echo "Testing media-hub..."
+          cd mcps/media-hub
+          python -c "from hub import server; print('media-hub: OK')"
+          cd ../..
+          
+          echo "✅ MCP import tests complete"
+
+  test-launcher:
+    name: Test Agent Launcher
+    runs-on: ubuntu-latest
+    needs: validate
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test launcher script
+        run: |
+          echo "=== Testing agent-launcher.sh ==="
+          
+          # Make executable
+          chmod +x launch/agent-launcher.sh
+          
+          # Test with non-existent agent (should fail gracefully)
+          ./launch/agent-launcher.sh nonexistent-agent echo "test" 2>&1 | grep -q "Agent not found" && echo "✅ Handles missing agent correctly"
+          
+          echo "✅ Launcher tests complete"
