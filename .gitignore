@@ -40,3 +40,4 @@ hub_debug.log
 
 # MacOS
 .DS_Store
+.env
