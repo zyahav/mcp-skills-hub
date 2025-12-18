@@ -1,100 +1,204 @@
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MCP Config Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2rem; max-width: 1200px; margin: 0 auto; background: #f5f5f7; }
-        h1 { color: #1d1d1f; }
-        .card { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .tabs { display: flex; gap: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #e5e5e5; }
-        .tab { padding: 0.5rem 1rem; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500; color: #6e6e73; }
-        .tab.active { border-bottom-color: #0071e3; color: #0071e3; }
-        pre { background: #1e1e1e; color: #e1e1e1; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 13px; margin: 0; }
-        button { background: #0071e3; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 14px; margin-top: 1rem; }
-        button:hover { background: #0077ed; }
-        .mcp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; }
-        .mcp-item { background: #f9f9f9; padding: 1rem; border-radius: 8px; border: 1px solid #e5e5e5; }
-        .mcp-name { font-weight: 600; margin-bottom: 0.5rem; color: #1d1d1f; }
-        .mcp-type { font-size: 12px; color: #86868b; text-transform: uppercase; letter-spacing: 0.5px; }
-        .status {font-size: 12px; padding: 2px 6px; border-radius: 4px; background: #e5ffe5; color: #008000; display: inline-block;}
-    </style>
-</head>
-<body>
-    <h1>MCP Configuration Dashboard</h1>
-    
-    <div class="card">
-        <h3>Detected MCPs</h3>
-        <div id="mcpList" class="mcp-list">Loading...</div>
-    </div>
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
 
-    <div class="card">
-        <div class="tabs">
-            <div class="tab active" onclick="showTab('claude')">Claude Desktop</div>
-            <div class="tab" onclick="showTab('gemini')">Gemini / VSCode</div>
-        </div>
-        
-        <div id="claudeContent">
-            <p>Add this to <code>~/Library/Application Support/Claude/claude_desktop_config.json</code></p>
-            <pre id="claudeConfig">Loading...</pre>
-            <button onclick="copyToClipboard('claudeConfig')">Copy Config</button>
-        </div>
-
-        <div id="geminiContent" style="display: none;">
-            <p>Add this to your <code>settings.json</code> (VSCode) or Gemini config.</p>
-            <pre id="geminiConfig">Loading...</pre>
-            <button onclick="copyToClipboard('geminiConfig')">Copy Config</button>
-        </div>
-    </div>
-
-    <script>
-        let data = null;
-
-        async function fetchConfig() {
-            try {
-                const res = await fetch('/api/config');
-                data = await res.json();
-                render();
-            } catch (e) {
-                document.getElementById('mcpList').textContent = "Error loading config: " + e.message;
+            to {
+                opacity: 1;
+                transform: translateY(0);
             }
         }
 
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 dark:bg-gray-900">
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="mb-8 fade-in">
+            <div
+                class="inline-flex items-center gap-2 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full text-sm mb-3">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                MCP Config Dashboard
+            </div>
+            <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-2">Your MCP Servers</h1>
+            <p class="text-gray-600 dark:text-gray-400">Copy-paste ready configurations for Claude Desktop, Gemini CLI,
+                and VSCode</p>
+        </div>
+
+        <!-- Platform Selector -->
+        <div class="mb-6 flex items-center gap-4 fade-in">
+            <span class="text-sm text-gray-600 dark:text-gray-400">Platform:</span>
+            <select id="platform"
+                class="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white">
+                <option value="mac">macOS</option>
+                <option value="windows">Windows</option>
+                <option value="linux">Linux</option>
+            </select>
+        </div>
+
+        <!-- Host Client Tabs -->
+        <div class="mb-6 fade-in">
+            <div class="border-b border-gray-200 dark:border-gray-700">
+                <nav class="flex gap-4">
+                    <button class="tab-btn active px-4 py-2 border-b-2 font-medium text-sm" data-tab="claude">
+                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
+                            </path>
+                        </svg>
+                        Claude Desktop
+                    </button>
+                    <button class="tab-btn px-4 py-2 border-b-2 font-medium text-sm" data-tab="gemini">
+                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                            </path>
+                        </svg>
+                        Gemini CLI
+                    </button>
+                    <button class="tab-btn px-4 py-2 border-b-2 font-medium text-sm" data-tab="vscode">
+                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                        </svg>
+                        VSCode
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div id="content" class="space-y-6"></div>
+    </div>
+
+    <script>
+        const CONFIG_PATHS = {
+            claude: {
+                mac: '~/Library/Application Support/Claude/claude_desktop_config.json',
+                windows: '%APPDATA%\\Claude\\claude_desktop_config.json',
+                linux: '~/.config/Claude/claude_desktop_config.json'
+            },
+            gemini: {
+                mac: '~/.gemini/settings.json',
+                windows: '%USERPROFILE%\\.gemini\\settings.json',
+                linux: '~/.gemini/settings.json'
+            },
+            vscode: {
+                mac: '~/.vscode/settings.json',
+                windows: '%APPDATA%\\Code\\User\\settings.json',
+                linux: '~/.config/Code/User/settings.json'
+            }
+        };
+
+        let currentPlatform = 'mac';
+        let currentTab = 'claude';
+        let configData = null;
+
+        async function fetchConfig() {
+            const res = await fetch('/api/config');
+            configData = await res.json();
+            render();
+        }
+
         function render() {
-            // List
-            const listEl = document.getElementById('mcpList');
-            listEl.innerHTML = data.mcps.map(m => `
-                <div class="mcp-item">
-                    <div class="mcp-name">${m.name}</div>
-                    <div class="mcp-type">${m.type}</div>
-                    <div style="margin-top:0.5rem; font-size:12px; color:#555;">
-                        ${m.command} ${m.args[0].split('/').pop()}
+            if (!configData) return;
+
+            const content = document.getElementById('content');
+            const path = CONFIG_PATHS[currentTab][currentPlatform];
+            const config = currentTab === 'claude' ? configData.claude : configData.gemini;
+
+            content.innerHTML = `
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 fade-in">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Config File Location</h3>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">Open this file and paste the config below</p>
+                        </div>
+                        <button onclick="copyText('${path}')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                            Copy Path
+                        </button>
+                    </div>
+                    <div class="bg-gray-100 dark:bg-gray-900 rounded-lg p-3">
+                        <code class="text-sm text-gray-800 dark:text-gray-200">${path}</code>
                     </div>
                 </div>
-            `).join('');
 
-            // Configs
-            document.getElementById('claudeConfig').textContent = data.claude;
-            document.getElementById('geminiConfig').textContent = data.gemini;
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 fade-in">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Configuration Snippet</h3>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">Detected ${configData.mcps.length} MCP servers</p>
+                        </div>
+                        <button onclick="copyText(\`${config.replace(/`/g, '\\`')}\`)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                            Copy Config
+                        </button>
+                    </div>
+                    <pre class="bg-gray-100 dark:bg-gray-900 rounded-lg p-4 overflow-x-auto text-sm text-gray-800 dark:text-gray-200">${config}</pre>
+                </div>
+
+                <div class="bg-blue-50 dark:bg-blue-900/20 rounded-2xl border border-blue-200 dark:border-blue-800 p-6 fade-in">
+                    <h3 class="text-lg font-semibold text-blue-900 dark:text-blue-200 mb-2">Quick Start</h3>
+                    <ol class="space-y-2 text-sm text-blue-800 dark:text-blue-300">
+                        <li>1. Copy the config file path above</li>
+                        <li>2. Open it in your editor (create if it doesn't exist)</li>
+                        <li>3. Copy and paste the configuration snippet</li>
+                        <li>4. Restart ${currentTab === 'claude' ? 'Claude Desktop' : currentTab === 'gemini' ? 'Gemini CLI' : 'VSCode'}</li>
+                        <li>5. Verify MCP tools appear in the interface</li>
+                    </ol>
+                </div>
+            `;
         }
 
-        function showTab(name) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
-            
-            document.getElementById('claudeContent').style.display = name === 'claude' ? 'block' : 'none';
-            document.getElementById('geminiContent').style.display = name === 'gemini' ? 'block' : 'none';
-        }
-
-        function copyToClipboard(elementId) {
-            const text = document.getElementById(elementId).textContent;
+        function copyText(text) {
             navigator.clipboard.writeText(text);
-            alert('Copied to clipboard!');
+            // Could add a toast notification here
         }
 
+        document.getElementById('platform').addEventListener('change', (e) => {
+            currentPlatform = e.target.value;
+            render();
+        });
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => {
+                    b.classList.remove('active', 'border-blue-600', 'text-blue-600');
+                    b.classList.add('border-transparent', 'text-gray-600');
+                });
+                btn.classList.add('active', 'border-blue-600', 'text-blue-600');
+                btn.classList.remove('border-transparent', 'text-gray-600');
+                currentTab = btn.dataset.tab;
+                render();
+            });
+        });
+
+        // Initialize
+        document.querySelector('.tab-btn.active').classList.add('border-blue-600', 'text-blue-600');
         fetchConfig();
     </script>
 </body>
+
 </html>
