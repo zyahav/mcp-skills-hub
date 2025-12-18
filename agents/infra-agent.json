@@ -1,0 +1,19 @@
+{
+    "name": "infra-agent",
+    "description": "Infrastructure management (DNS, etc)",
+    "allowed_mcps": [
+        {
+            "id": "cloudflare-dns",
+            "args": [],
+            "env": {}
+        }
+    ],
+    "env_allowlist": [
+        "HOME",
+        "USER",
+        "PATH",
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ZONE_ID"
+    ],
+    "transport_preference": "stdio"
+}

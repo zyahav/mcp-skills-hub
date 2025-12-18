@@ -1,0 +1,8 @@
+{
+    "name": "mcp-scaffolder",
+    "version": "0.1.0",
+    "description": "Standard Skill Generator for MCP Skills Hub",
+    "tools": [
+        "scaffold_skill"
+    ]
+}
