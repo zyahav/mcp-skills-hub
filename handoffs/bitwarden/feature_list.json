@@ -10,5 +10,20 @@
     "passes": true,
     "verified_at": "2025-12-18",
     "commit": "Initial Commit"
+  },
+  {
+    "milestone": 2,
+    "category": "client",
+    "description": "Bitwarden Client Implementation",
+    "deliverables": [
+      "mcps/bitwarden/src/bitwarden_client.ts",
+      "mcps/bitwarden/src/cli.ts",
+      "mcps/bitwarden/src/__tests__/bitwarden_client.test.ts",
+      "mcps/bitwarden/vitest.config.ts"
+    ],
+    "passes": true,
+    "verified_at": "2025-12-18",
+    "verification": "npm test → 13 tests passed",
+    "commit": "feat(bitwarden): implement client with R1-R8 safety rules and CLI"
   }
 ]

@@ -1,4 +1,17 @@
-# Progress Log: bitwarden
+Bitwarden MCP Progress
+======================
+Last Updated: 2025-12-18
 
-## Session 2025-12-18
-- [INIT] Scaffolding created by mcp-scaffolder.
+Milestone 1: Scaffolding ............ DONE
+Milestone 2: Client Implementation .. IN REVIEW (13/13 tests pass)
+Milestone 3: MCP Server ............. TODO
+Milestone 4: Integration ............ TODO
+
+Key Files:
+- src/bitwarden_client.ts (sacred core)
+- src/cli.ts (CLI interface)
+- src/index.ts (MCP server - needs update in M3)
+
+Architecture Decision: SETTLED
+- One core, two interfaces (CLI + MCP)
+- See LESSONS_LEARNED.md
