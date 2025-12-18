@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project_specification>
+  <project_name>Prerequisites: Cloudflare DNS Manager MCP</project_name>
+  <status>✅ VERIFIED (2025-12-18)</status>
+
+  <infrastructure_provisioning_state>
+    <network_layer>
+      <provider>Cloudflare</provider>
+      <zone_name>zurielyahav.com</zone_name>
+      <zone_id>f2a2f13f71948ecb72a09c2d7bb9e2cd</zone_id>
+    </network_layer>
+  </infrastructure_provisioning_state>
+
+  <secret_management_rules>
+    <source_of_truth>Bitwarden - Item: 'Cloudflare DNS Manager'</source_of_truth>
+    <mandatory_vault_fields>
+      <field name="CLOUDFLARE_API_TOKEN">Scope: DNS:Edit, Zone:Read (Hidden field)</field>
+      <field name="CLOUDFLARE_ZONE_ID">Value: f2a2f13f71948ecb72a09c2d7bb9e2cd (Notes field)</field>
+    </mandatory_vault_fields>
+    <rule>Agent must verify `bw unlock` status and `BW_SESSION` availability before proceeding.</rule>
+  </secret_management_rules>
+
+  <system_requirements>
+    <requirement name="Node.js">v18+ required</requirement>
+    <requirement name="npm">v9+ required</requirement>
+    <requirement name="Bitwarden CLI">bw command available</requirement>
+    <requirement name="TypeScript">Will be installed as devDependency</requirement>
+  </system_requirements>
+
+  <verification_checklist>
+    <check id="1">Run: `node --version` → Expect v18+</check>
+    <check id="2">Run: `npm --version` → Expect v9+</check>
+    <check id="3">Run: `bw --version` → Expect version output</check>
+    <check id="4">Run: `bw status | grep -o '"status":"[^"]*"'` → Expect "unlocked"</check>
+    <check id="5">Run: `bw get item "Cloudflare DNS Manager" --pretty | head -20` → Expect item details</check>
+    <check id="6">Confirm manual access to Cloudflare Dashboard for zurielyahav.com</check>
+  </verification_checklist>
+
+  <agent_instructions>
+    <instruction>Execute each check in verification_checklist</instruction>
+    <instruction>Report pass/fail for each check</instruction>
+    <instruction>Do NOT proceed to execution spec if any check fails</instruction>
+    <instruction>If all checks pass, report "PREREQUISITES VERIFIED" and STOP</instruction>
+  </agent_instructions>
+</project_specification>
