@@ -1,0 +1,9 @@
+# Progress Log: tunnel-manager
+
+## Session 2025-12-18
+- [INIT] Bootstrapped harness files.
+- [EXEC] Milestone 3: Scaffolded MCP project structure in `mcps/tunnel-manager`.
+- [TEST] Milestone 3: Verified build (`npm run build`).
+- [EXEC] Milestone 0: Verified environment (cloudflared present, connectivity good).
+- [NOTE] Milestone 0: "ZuRot Managed" markers missing (as expected).
+- [TODO] Ready for Milestone 1: Initialize Managed Block.

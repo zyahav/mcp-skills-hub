@@ -1,0 +1,56 @@
+[
+    {
+        "milestone": 0,
+        "category": "verification",
+        "description": "Environment Verification & Health Check",
+        "deliverables": [],
+        "passes": true,
+        "verified_at": "2025-12-18",
+        "commit": "Current"
+    },
+    {
+        "milestone": 1,
+        "category": "core",
+        "description": "Initialize Managed Block in Config",
+        "deliverables": [
+            "~/tunnel-management/configs/config.yml"
+        ],
+        "passes": false,
+        "verified_at": null,
+        "commit": null
+    },
+    {
+        "milestone": 2,
+        "category": "core",
+        "description": "Create Run State Ledger (run-state.json)",
+        "deliverables": [
+            "~/tunnel-management/run-state.json"
+        ],
+        "passes": false,
+        "verified_at": null,
+        "commit": null
+    },
+    {
+        "milestone": 3,
+        "category": "scaffolding",
+        "description": "Scaffold MCP Project via mcp-scaffolder",
+        "deliverables": [
+            "mcps/tunnel-manager/package.json",
+            "mcps/tunnel-manager/src/index.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18",
+        "commit": "Current"
+    },
+    {
+        "milestone": 4,
+        "category": "core",
+        "description": "Implement Concurrency Lock System",
+        "deliverables": [
+            "src/lock.ts"
+        ],
+        "passes": false,
+        "verified_at": null,
+        "commit": null
+    }
+]
