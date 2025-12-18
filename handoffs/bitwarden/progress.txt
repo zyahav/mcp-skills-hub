@@ -1,0 +1,4 @@
+# Progress Log: bitwarden
+
+## Session 2025-12-18
+- [INIT] Scaffolding created by mcp-scaffolder.

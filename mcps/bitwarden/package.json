@@ -1,0 +1,21 @@
+{
+  "name": "mcp-bitwarden",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "mcp-bitwarden": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x build/index.js",
+    "start": "node build/index.js",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

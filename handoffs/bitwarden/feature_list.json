@@ -1,0 +1,14 @@
+[
+  {
+    "milestone": 1,
+    "category": "scaffolding",
+    "description": "Project Scaffolding",
+    "deliverables": [
+      "mcps/bitwarden/package.json",
+      "mcps/bitwarden/src/index.ts"
+    ],
+    "passes": true,
+    "verified_at": "2025-12-18",
+    "commit": "Initial Commit"
+  }
+]
