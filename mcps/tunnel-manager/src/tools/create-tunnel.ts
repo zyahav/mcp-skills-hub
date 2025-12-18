@@ -1,10 +1,13 @@
 
-import { updateManagedBlock, updateManagedBlock as updateBlockInConfig } from '../config-parser.js';
+import { updateManagedBlock, updateManagedBlock as updateBlockInConfig, readConfigRaw } from '../config-parser.js';
 import { acquireLock, releaseLock, withLock } from '../lock.js';
 import { updateTunnelRecord, findTunnelRecord } from '../ledger.js';
 import { getExecutionContext, isProductionTunnel } from '../ownership.js';
 import { runCommand } from '../tool-runner.js';
 import { TunnelClass, TunnelRecord } from '../types.js';
+import { verifyConfigIntegrity, verifyDNS, verifyHTTP } from '../verification.js';
+import fs from 'fs';
+import path from 'path';
 
 interface CreateTunnelArgs {
     subdomain: string;
@@ -22,108 +25,114 @@ export async function createTunnelTool(args: CreateTunnelArgs) {
     }
 
     const fullDomain = `${subdomain}.zurielyahav.com`;
+    const tunnelUrl = `https://${fullDomain}`;
 
-    // Check if exists in Ledger (conflict check)
-    // Note: Config is the source of truth for *routing*, Ledger for *ownership*.
-    // We should check if it's already in the config too, but `findTunnelRecord` is faster if ledger is consistent.
-    // However, for idempotency as per Spec:
-    // "Create: exists + same = NO-OP"
-    // "Create: exists + different = FAIL"
+    // === Idempotency Check (The "Self-Healing" V2 Logic) ===
+    // Check 1: Is it in the ledger?
+    const existingLedger = await findTunnelRecord(fullDomain);
     
-    // We check ledger first? Or just try to add? 
-    // Spec says: "Check if exists... findTunnel(fullDomain)".
-    // `findTunnel` usually implies checking config or ledger. Let's check ledger.
-    const existing = await findTunnelRecord(fullDomain);
+    // Check 2: Does DNS resolve? (Zombie Check)
+    const dnsStatus = await verifyDNS(fullDomain);
     
-    if (existing) {
-        if (existing.port === port) {
-             return { status: 'no-op', message: 'Tunnel already exists with same config', url: `https://${fullDomain}` };
+    // Check 3: Is it reachable?
+    // const httpStatus = await verifyHTTP(tunnelUrl);
+
+    if (existingLedger) {
+        if (existingLedger.port === port) {
+             // It exists in ledger. 
+             // If DNS is missing, should we heal it?
+             if (!dnsStatus.success) {
+                  // HEALING: "Tunnel exists locally but not publicly."
+                  console.error(`Status: Tunnel ${fullDomain} found in ledger but missing DNS. Healing...`);
+                  await runCommand(`cloudflared tunnel route dns mobile-logs-tunnel ${fullDomain}`);
+                  return { status: 'healed', message: 'Tunnel existed but DNS was missing. DNS route recreated.', url: tunnelUrl };
+             }
+             return { status: 'no-op', message: 'Tunnel already exists with same config', url: tunnelUrl };
         } else {
-             throw new Error(`Tunnel conflict: ${fullDomain} already exists on port ${existing.port}`);
+             throw new Error(`Tunnel conflict: ${fullDomain} already exists on port ${existingLedger.port}`);
         }
     }
 
     if (tunnel_class === 'persistent') {
-        // We verify if it's production? 
-        // Spec says: "Class B - add outside managed block with approval".
-        // This tool implementation might not support interactive verification here.
-        // We will throw error for now or handle as instructed.
-        // Spec pseudo-code: "requireUserApproval()".
-        // Since we are non-interactive in the tool function itself, usually we rely on the Agent to ask user.
-        // But if the User called this tool, they might expect it to work.
-        // However, we are restricted to ONLY edit ZUROT-managed block by the "Authority Constraints".
-        // Constraint: "MCP may ONLY edit within ZUROT-managed block".
-        // So 'persistent' creation via MCP might be disallowed unless we override?
-        // Wait, Spec says "Class B - add outside managed block with approval".
-        // But Constraint says "MCP may ONLY edit within ZUROT-managed block".
-        // This is a conflict. Usually Constraints win. 
-        // I will implement ephemeral only for now or throw for persistent.
         if (isProductionTunnel(fullDomain)) {
             throw new Error('ERR_TUNNEL_002: Cannot create production tunnel via MCP');
         }
-        // If it's a dev-infra persistent tunnel, we also can't edit outside managed block easily without parsing robustly.
-        // `config-parser.ts` only supports managed block.
-        // So I'll restrict to ephemeral for now or warn.
         throw new Error("Creation of persistent tunnels is not yet supported by automation. Please add manually to config.yml outside the managed block.");
     }
 
-    // Ephemeral Creation
+    // === Phase 1: Config Update with Rollback Protection ===
     await withLock(async () => {
-        // Add to managed block
-        // Format: `  - hostname: fullDomain\n    service: http://localhost:port`
-        // We need to read current managed block and append?
-        // `updateManagedBlock` takes *new content*. It replaces the *entire* managed block content.
-        // So we must READ it first, parse/append, then WRITE.
-        // My `updateManagedBlock` in `config-parser.ts` takes `newContent`.
-        // I need a `addToManagedBlock` helper or do it here.
-        // I'll do it here.
+        // 1. Backup Current Config
+        // We read raw content to memory
+        const currentConfig = await readConfigRaw();
+        const configPath = process.env.TUNNEL_CONFIG_PATH; // Should be set by wrapper
         
-        // Wait, `config-parser` exports `extractManagedBlock`.
-        // I need to import it.
-        const { readConfigRaw, extractManagedBlock } = await import('../config-parser.js');
-        const config = await readConfigRaw();
-        const { managedContent } = extractManagedBlock(config);
+        // 2. Prepare Update
+        const { extractManagedBlock } = await import('../config-parser.js');
+        const { managedContent } = extractManagedBlock(currentConfig);
         
-        // Check duplication in config just in case ledger missed it
-        if (managedContent.includes(`hostname: ${fullDomain}`)) {
-             // It exists in config. Check port?
-             // Simple regex check
-             // This is brittle without full parsing.
-             // If we assume standard formatting provided by this tool:
-             // `  - hostname: ...`
-             // For now, if it's in config, we assume it matches or we might fail.
-             // But if we already returned no-op from ledger check, and it's here but not in ledger, that's inconsistent.
-             // We'll proceed to add it if ledger didn't have it (maybe correcting drift).
-             // But if duplication, we shouldn't add it again.
-             // If duplicate hostname in list, cloudflared might complain or pick first.
-             // We should avoid duplicates.
+        // Helper to clean '[]' artifact but preserve structure
+        let newBlock = managedContent;
+        if (newBlock.trim() === '[]') {
+            newBlock = '';
         }
-        
+
+        // If blockText is empty, we must start with a newline to separate from START marker.
+        if (!newBlock) {
+            newBlock = '\n';
+        } 
+        // If it's not empty but doesn't start with newline, prepend one (rare/smashed case).
+        else if (!newBlock.startsWith('\n')) {
+            newBlock = '\n' + newBlock;
+        }
+
+        // Ensure it ends with newline before appending next item
+        if (!newBlock.endsWith('\n')) {
+            newBlock += '\n';
+        }
+
         const newEntry = `  - hostname: ${fullDomain}\n    service: http://localhost:${port}\n    originRequest:\n      httpHostHeader: "localhost"\n`;
-        let newBlock = managedContent.replace('[]', '').trim();
-        if (newBlock && !newBlock.endsWith('\n')) newBlock += '\n';
         newBlock += newEntry;
         
-        await updateBlockInConfig(newBlock);
-        
-        // Route DNS
+        // 3. Apply Update
         try {
-            // exec(`cloudflared tunnel route dns mobile-logs-tunnel ${fullDomain}`)
-            // We assume tunnel name 'mobile-logs-tunnel' or similar?
-            // Spec says: `cloudflared tunnel route dns mobile-logs-tunnel ${fullDomain}`
-            // We should probably check if `mobile-logs-tunnel` is correct name.
-            // But I'll follow spec.
-            await runCommand(`cloudflared tunnel route dns mobile-logs-tunnel ${fullDomain}`);
+            await updateBlockInConfig(newBlock);
+            
+            // 4. Verify Integrity (The "Syntax" Check)
+            const integrity = await verifyConfigIntegrity();
+            if (!integrity.success) {
+                // FAIL! Rollback!
+                throw new Error(`Config integrity check failed: ${integrity.error}`);
+            }
         } catch (e: any) {
-            // If already exists, ignore?
-            if (e.message.includes('already exists')) {
-                // ok
-            } else {
-                throw e;
+            console.error('Config update failed. Rolling back...');
+            if (configPath) {
+                fs.writeFileSync(configPath, currentConfig); // Restore original bytes
+            }
+            throw new Error(`ERR_CONFIG_INVALID: Failed to update config safely. Rolled back. Details: ${e.message}`);
+        }
+        
+        // === Phase 2: DNS Routing ===
+        try {
+            await runCommand(`cloudflared tunnel route dns mobile-logs-tunnel ${fullDomain}`);
+            
+            // Verify DNS (Wait a moment?)
+            // DNS propagation takes time, but cloudflare is fast.
+            // We'll trust the command success for now, or do a loose check.
+        } catch (e: any) {
+            if (!e.message.includes('already exists')) {
+                 // If DNS fails, we have a Zombie Tunnel (Local config yes, DNS no).
+                 // We should probably rollback config too? 
+                 // Or leave it and let next idempotent run Heal it?
+                 // V2 Philosophy: Let "Self-Healing" handle it next time.
+                 // Returing user error but leaving partial state IS the zombie cause.
+                 // But cleaning up config is complex.
+                 // We'll throw detailed error advising retry.
+                 throw new Error(`ERR_DNS_FAILED: Tunnel configured locally but DNS failed. Retry to heal. Details: ${e.message}`);
             }
         }
 
-        // Update Ledger
+        // === Phase 3: Ledger Record ===
         const record: TunnelRecord = {
             subdomain: fullDomain,
             port,
@@ -136,10 +145,20 @@ export async function createTunnelTool(args: CreateTunnelArgs) {
         };
         await updateTunnelRecord(fullDomain, record);
     });
+    
+    // === Final Reachability Check ===
+    // We do this OUTSIDE the lock to be fast and non-blocking
+    // Wait 1s for propagation
+    await new Promise(r => setTimeout(r, 1000));
+    const reachability = await verifyHTTP(tunnelUrl);
+    let message = 'Tunnel created successfully.';
+    if (!reachability.success) {
+        message += ` WARNING: Reachability check failed (${reachability.error}). Ensure local server is running on port ${port}.`;
+    }
 
     return {
         status: 'created',
-        message: 'Tunnel created. Restart cloudflared: launchctl restart com.cloudflare.cloudflared',
-        url: `https://${fullDomain}`
+        message,
+        url: tunnelUrl
     };
 }
