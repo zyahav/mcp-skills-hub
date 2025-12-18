@@ -227,3 +227,36 @@ This session produced a **production-ready, three-class tunnel management archit
 5. Implement following Agent Loop
 
 **Status:** Ready for implementation ✅
+
+---
+
+### 10. The Scaffolding "Blind Spots" (Git & Tests)
+**Observation:** We verified the completeness of the `mcp-scaffolder` loop:
+1.  **Git:** ✅ Created and committed successfully.
+2.  **Tests:** ❌ No test harness (`tests/` folder or `vitest` config) was generated.
+3.  **Completeness:** ❌ The loop halted due to `Archon` connectivity (timeout) and `mcp-scaffolder` dependency issues.
+
+**Lesson:** **The "Harness Loop" is incomplete without a Test Harness.**
+We cannot practice TDD if the scaffolder doesn't give us a test environment.
+
+**Recommendation:** Update `mcp-scaffolder` template to include:
+- `tests/` directory
+- `vitest` dependency
+- `basic.test.ts` to verify the "health check"
+
+### 11. The "Archon-First" Friction (Connectivity)
+**Observation:** The strict "Archon-First" rule halted work because the Agent couldn't connect to `localhost:8051`, even though the tunnel was up.
+- **Cause:** `mcp_config.json` default timeout was too short for tunnel latency.
+- **Fix:** Added `"timeout": 60` to config.
+
+**Lesson:** **Resilience is required for the Task Manager.**
+If the Task Manager (Archon) is unreachable, the Agent is paralyzed.
+1.  **Config:** Always set high timeouts for tunneled MCPs.
+2.  **Strategy:** Use public URLs (Cloudflare Access) instead of raw tunnels for critical infrastructure.
+
+### 12. "Bootstrapping" Paradox
+**Observation:** We needed `mcp-scaffolder` to create the project, but `mcp-scaffolder` crashed because it lacked the `mcp` dependency (which we hadn't installed yet).
+
+**Lesson:** **Tools must be runnable in "CLI Mode" without heavy dependencies.**
+We patched `server.py` to run as a standalone CLI script even if `mcp` SDK imports failed. This allowed us to bootstrap the project despite environment issues.
+
