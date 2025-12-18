@@ -1,0 +1,64 @@
+[
+  {
+    "milestone": 1,
+    "category": "scaffolding",
+    "description": "Project Scaffolding - Create directory structure, package.json, tsconfig.json, skill.json",
+    "deliverables": [
+      "mcps/cloudflare-dns/package.json",
+      "mcps/cloudflare-dns/tsconfig.json", 
+      "mcps/cloudflare-dns/skill.json",
+      "mcps/cloudflare-dns/src/"
+    ],
+    "passes": true,
+    "verified_at": "2025-12-18",
+    "commit": "1ee3c60"
+  },
+  {
+    "milestone": 2,
+    "category": "implementation",
+    "description": "Safety & Client Layers - Create src/safety.ts with apex protection and src/cloudflare.ts with API client",
+    "deliverables": [
+      "mcps/cloudflare-dns/src/safety.ts",
+      "mcps/cloudflare-dns/src/cloudflare.ts"
+    ],
+    "verification": {
+      "typescript": "npm install && npx tsc --noEmit",
+      "safety_test": "Apex protection blocks @, www, zurielyahav.com"
+    },
+    "passes": false
+  },
+  {
+    "milestone": 3,
+    "category": "implementation", 
+    "description": "MCP Server & Bitwarden Wrapper - Create src/index.ts with MCP tools and wrapper.sh for secrets",
+    "deliverables": [
+      "mcps/cloudflare-dns/src/index.ts",
+      "mcps/cloudflare-dns/wrapper.sh",
+      "mcps/cloudflare-dns/build/"
+    ],
+    "verification": {
+      "build": "npm run build",
+      "files": "build/index.js, build/safety.js, build/cloudflare.js exist"
+    },
+    "passes": false
+  },
+  {
+    "milestone": 4,
+    "category": "integration",
+    "description": "Integration & Live Testing - Agent configs and live DNS tests",
+    "deliverables": [
+      "agents/infra-agent.json",
+      "agents/admin-agent.json (updated)"
+    ],
+    "verification": {
+      "live_tests": [
+        "upsert TXT test-mcp.zurielyahav.com -> SUCCESS",
+        "update TXT test-mcp.zurielyahav.com -> SUCCESS",
+        "delete TXT test-mcp.zurielyahav.com -> SUCCESS",
+        "upsert @ -> ERR_APEX_PROTECTION_VIOLATION",
+        "upsert www -> ERR_APEX_PROTECTION_VIOLATION"
+      ]
+    },
+    "passes": false
+  }
+]
