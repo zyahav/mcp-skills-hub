@@ -6,4 +6,5 @@
 - [TEST] Milestone 3: Verified build (`npm run build`).
 - [EXEC] Milestone 0: Verified environment (cloudflared present, connectivity good).
 - [NOTE] Milestone 0: "ZuRot Managed" markers missing (as expected).
-- [TODO] Ready for Milestone 1: Initialize Managed Block.
+- [EXEC] Milestone 1: Initialized Managed Block in `config.yml` (added markers).
+- [TODO] Ready for Milestone 2: Create Run State Ledger.

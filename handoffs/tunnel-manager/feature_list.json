@@ -15,9 +15,9 @@
         "deliverables": [
             "~/tunnel-management/configs/config.yml"
         ],
-        "passes": false,
-        "verified_at": null,
-        "commit": null
+        "passes": true,
+        "verified_at": "2025-12-18",
+        "commit": "Current"
     },
     {
         "milestone": 2,

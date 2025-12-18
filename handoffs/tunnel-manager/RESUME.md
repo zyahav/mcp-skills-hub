@@ -4,12 +4,12 @@
 **Archon Project ID:** PENDING
 
 ## Current Context
-Scaffolding (Milestone 3) and Environment Verification (Milestone 0) are complete.
-We are now ready to begin the core implementation, starting with configuring the tunnel management files (Milestones 1 & 2).
+Scaffolding (Milestone 3), Environment Verification (Milestone 0), and Config Initialization (Milestone 1) are complete.
+We are now ready to create the run-state ledger.
 
 ## Immediate Tasks
-1. **Milestone 1:** Initialize Managed Block in `~/tunnel-management/configs/config.yml`.
-2. **Milestone 2:** Create Run State Ledger at `~/tunnel-management/run-state.json`.
+1. **Milestone 2:** Create Run State Ledger at `~/tunnel-management/run-state.json`.
+2. **Milestone 4:** Implement Concurrency Lock System.
 
 ## Active Files
 - `mcps/tunnel-manager/` (Scaffolded)
