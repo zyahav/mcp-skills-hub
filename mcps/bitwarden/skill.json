@@ -1,0 +1,35 @@
+{
+  "name": "bitwarden",
+  "version": "0.1.0",
+  "description": "Secure, read-only secret retrieval from Bitwarden. Replaces ad-hoc bw+jq parsing with centralized, rule-enforced access.",
+  "tools": [
+    {
+      "name": "bitwarden_get_secret",
+      "description": "Retrieve a secret value from a Bitwarden item's custom field.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "item": { "type": "string", "description": "Exact name of the Bitwarden item" },
+          "field": { "type": "string", "description": "Name of the custom field" }
+        },
+        "required": ["item", "field"]
+      }
+    },
+    {
+      "name": "bitwarden_get_notes",
+      "description": "Retrieve notes from a Bitwarden item. Requires PUBLIC_NOTES=\"true\" custom field.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "item": { "type": "string", "description": "Exact name of the Bitwarden item" }
+        },
+        "required": ["item"]
+      }
+    }
+  ],
+  "safety": {
+    "rules": ["R1-R8 enforced via bitwarden_client.ts"],
+    "read_only": true,
+    "requires": ["BW_SESSION env var", "Vault unlocked"]
+  }
+}

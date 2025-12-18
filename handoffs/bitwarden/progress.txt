@@ -1,0 +1,12 @@
+Bitwarden MCP Progress
+======================
+Last Updated: 2025-12-18
+
+Milestone 1: Scaffolding ............ DONE
+Milestone 2: Client Implementation .. DONE (13/13 tests pass)
+Milestone 3: MCP Server ............. DONE (build passes)
+Milestone 4: Integration ............ DONE (live test passes)
+
+STATUS: ✅ COMPLETE
+
+Next: Refactor cloudflare-dns/wrapper.sh to use bitwarden-mcp CLI

@@ -1,0 +1,25 @@
+{
+    "name": "infra-agent",
+    "description": "Infrastructure management (DNS, etc)",
+    "allowed_mcps": [
+        {
+            "id": "bitwarden",
+            "args": [],
+            "env": {}
+        },
+        {
+            "id": "cloudflare-dns",
+            "args": [],
+            "env": {}
+        }
+    ],
+    "env_allowlist": [
+        "HOME",
+        "USER",
+        "PATH",
+        "BW_SESSION",
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ZONE_ID"
+    ],
+    "transport_preference": "stdio"
+}

@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project_specification>
+  <project_name>Execution: Cloudflare DNS Manager MCP</project_name>
+  <status>🟡 IN PROGRESS - Prerequisites Verified</status>
+  
+  <location>
+    <monorepo_root>/Users/zyahav/Documents/dev/mcp-skills-hub-monorepo/mcp-skills-hub-dev</monorepo_root>
+    <skill_path>mcps/cloudflare-dns/</skill_path>
+  </location>
+
+  <operational_rules>
+    <rule id="1">Location: `mcps/cloudflare-dns/` relative to monorepo root</rule>
+    <rule id="2">Safety First: REJECT apex (@, www, zurielyahav.com). ALLOW only A, CNAME, TXT</rule>
+    <rule id="3">Idempotency: Always GET existing records before performing PUT or POST</rule>
+    <rule id="4">Atomic Execution: STOP after each milestone and wait for user approval</rule>
+    <rule id="5">Error Codes: Use ERR_APEX_PROTECTION_VIOLATION, ERR_INVALID_RECORD_TYPE, ERR_AMBIGUOUS_MULTI_MATCH</rule>
+  </operational_rules>
+
+  <milestones>
+    <milestone index="1">
+      <title>Project Scaffolding</title>
+      <status>✅ COMPLETE (2025-12-18)</status>
+      <actions>
+        <action>1. Create directory: `mkdir -p mcps/cloudflare-dns/src`</action>
+        <action>2. Create `package.json` with @modelcontextprotocol/sdk and axios</action>
+        <action>3. Create `tsconfig.json` for ES2022/CommonJS output to ./build</action>
+        <action>4. Create `skill.json` manifest with tools: upsert_dns_record, delete_dns_record</action>
+      </actions>
+      <deliverables>
+        <file>mcps/cloudflare-dns/package.json</file>
+        <file>mcps/cloudflare-dns/tsconfig.json</file>
+        <file>mcps/cloudflare-dns/skill.json</file>
+        <file>mcps/cloudflare-dns/src/ (directory)</file>
+      </deliverables>
+      <verification>
+        <command>ls mcps/cloudflare-dns/</command>
+        <expected>package.json, tsconfig.json, skill.json, src/</expected>
+      </verification>
+      <stop_condition>STOP and report deliverables. Wait for "proceed" command.</stop_condition>
+    </milestone>
+
+    <milestone index="2">
+      <title>Implementation: Safety &amp; Client Layers</title>
+      <status>⬜ NOT STARTED</status>
+      <actions>
+        <action>1. Create `src/safety.ts` with functions:
+          - validateSubdomain(subdomain: string) → throws ERR_APEX_PROTECTION_VIOLATION
+          - validateRecordType(type: string) → throws ERR_INVALID_RECORD_TYPE
+          - enforceProxied(type: string, proxied: boolean) → returns false for TXT
+          - checkMultiMatch(records: any[]) → throws ERR_AMBIGUOUS_MULTI_MATCH if length > 1
+        </action>
+        <action>2. Create `src/cloudflare.ts` with CloudflareClient class:
+          - constructor(apiToken: string, zoneId: string)
+          - listRecords(name?: string, type?: string): Promise&lt;DNSRecord[]&gt;
+          - createRecord(record: CreateRecordParams): Promise&lt;DNSRecord&gt;
+          - updateRecord(id: string, record: UpdateRecordParams): Promise&lt;DNSRecord&gt;
+          - deleteRecord(id: string): Promise&lt;void&gt;
+        </action>
+      </actions>
+      <deliverables>
+        <file>mcps/cloudflare-dns/src/safety.ts</file>
+        <file>mcps/cloudflare-dns/src/cloudflare.ts</file>
+      </deliverables>
+      <verification>
+        <command>cd mcps/cloudflare-dns &amp;&amp; npm install &amp;&amp; npx tsc --noEmit</command>
+        <expected>No TypeScript errors</expected>
+        <safety_test>
+          <description>Prove apex protection works</description>
+          <command>cd mcps/cloudflare-dns &amp;&amp; npx ts-node -e "
+import { validateSubdomain } from './src/safety';
+const tests = ['@', 'www', 'zurielyahav.com', 'test-ok'];
+tests.forEach(t => {
+  try { validateSubdomain(t); console.log('FAIL: ' + t + ' was allowed'); }
+  catch(e) { console.log('PASS: ' + t + ' blocked - ' + e.message); }
+});
+"</command>
+          <expected>@ blocked, www blocked, zurielyahav.com blocked, test-ok FAIL (allowed)</expected>
+        </safety_test>
+      </verification>
+      <stop_condition>STOP and report safety test results. Wait for "proceed" command.</stop_condition>
+    </milestone>
+
+    <milestone index="3">
+      <title>Implementation: MCP Server &amp; Bitwarden Wrapper</title>
+      <status>⬜ NOT STARTED</status>
+      <actions>
+        <action>1. Create `src/index.ts` - MCP server with two tools:
+          - upsert_dns_record(subdomain, type, content, proxied)
+            Logic: validate → GET existing → if 0: POST, if 1: PUT, if >1: ABORT
+          - delete_dns_record(subdomain, type?)
+            Logic: validate → GET existing → if count != 1: ABORT → DELETE by ID
+        </action>
+        <action>2. Create `wrapper.sh` - Bitwarden secret retrieval:
+          - Check BW_SESSION exists
+          - Pull CLOUDFLARE_API_TOKEN via `bw get password "Cloudflare DNS Manager"`
+          - Pull CLOUDFLARE_ZONE_ID via `bw get notes "Cloudflare DNS Manager"` 
+          - Export as env vars
+          - Launch: node build/index.js
+        </action>
+        <action>3. Build: `npm run build`</action>
+        <action>4. Make wrapper executable: `chmod +x wrapper.sh`</action>
+      </actions>
+      <deliverables>
+        <file>mcps/cloudflare-dns/src/index.ts</file>
+        <file>mcps/cloudflare-dns/wrapper.sh</file>
+        <file>mcps/cloudflare-dns/build/ (compiled JS)</file>
+      </deliverables>
+      <verification>
+        <command>cd mcps/cloudflare-dns &amp;&amp; npm run build</command>
+        <expected>Compiles without errors, build/ directory created</expected>
+        <command>ls mcps/cloudflare-dns/build/</command>
+        <expected>index.js, safety.js, cloudflare.js</expected>
+      </verification>
+      <stop_condition>STOP and report build results. Wait for "proceed" command.</stop_condition>
+    </milestone>
+
+    <milestone index="4">
+      <title>Integration &amp; Live Testing</title>
+      <status>⬜ NOT STARTED</status>
+      <actions>
+        <action>1. Create `agents/infra-agent.json` with cloudflare-dns in allowed_mcps</action>
+        <action>2. Update `agents/admin-agent.json` to include cloudflare-dns</action>
+        <action>3. Live Test: Create TXT record `test-mcp.zurielyahav.com`</action>
+        <action>4. Live Test: Update the test record with new content</action>
+        <action>5. Live Test: Delete the test record</action>
+        <action>6. Negative Test: Attempt to modify `@` → expect ERR_APEX_PROTECTION_VIOLATION</action>
+        <action>7. Negative Test: Attempt to modify `www` → expect ERR_APEX_PROTECTION_VIOLATION</action>
+      </actions>
+      <deliverables>
+        <file>agents/infra-agent.json</file>
+        <file>agents/admin-agent.json (updated)</file>
+      </deliverables>
+      <verification>
+        <live_tests>
+          <test id="1">upsert_dns_record(subdomain="test-mcp", type="TXT", content="hello", proxied=false) → SUCCESS</test>
+          <test id="2">upsert_dns_record(subdomain="test-mcp", type="TXT", content="updated", proxied=false) → SUCCESS</test>
+          <test id="3">delete_dns_record(subdomain="test-mcp", type="TXT") → SUCCESS</test>
+          <test id="4">upsert_dns_record(subdomain="@", type="A", content="1.2.3.4", proxied=true) → ERR_APEX_PROTECTION_VIOLATION</test>
+          <test id="5">upsert_dns_record(subdomain="www", type="CNAME", content="x.com", proxied=true) → ERR_APEX_PROTECTION_VIOLATION</test>
+        </live_tests>
+        <cloudflare_verification>Check Cloudflare Audit Logs to confirm API calls</cloudflare_verification>
+      </verification>
+      <stop_condition>STOP and report all test results. Skill complete if all pass.</stop_condition>
+    </milestone>
+  </milestones>
+
+  <responsibility_matrix>
+    <entry task="Skill Logic" owner="Coding Agent" />
+    <entry task="Secrets Retrieval" owner="Bitwarden CLI / wrapper.sh" />
+    <entry task="DNS Safety" owner="src/safety.ts (Enforced in code)" />
+    <entry task="API Communication" owner="src/cloudflare.ts" />
+    <entry task="Live Testing" owner="User with BW_SESSION" />
+  </responsibility_matrix>
+
+  <completion_checklist>
+    <item>All 4 milestones complete</item>
+    <item>Build succeeds without errors</item>
+    <item>Safety tests pass (apex blocked)</item>
+    <item>Live DNS create/update/delete works</item>
+    <item>Negative tests fail correctly</item>
+    <item>Agent definitions updated</item>
+    <item>Committed to git on dev branch</item>
+  </completion_checklist>
+</project_specification>
