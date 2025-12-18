@@ -36,6 +36,9 @@ hub_debug.log
 *.json
 !agents/*.json
 !**/skill.json
+!**/package.json
+!**/tsconfig.json
+!**/feature_list.json
 
 
 # VS Code
