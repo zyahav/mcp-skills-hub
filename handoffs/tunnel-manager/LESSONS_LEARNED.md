@@ -227,3 +227,72 @@ This session produced a **production-ready, three-class tunnel management archit
 5. Implement following Agent Loop
 
 **Status:** Ready for implementation ✅
+
+---
+
+### 10. The Scaffolding "Blind Spots" (Git & Tests)
+**Observation:** We verified the completeness of the `mcp-scaffolder` loop:
+1.  **Git:** ✅ Created and committed successfully.
+2.  **Tests:** ❌ No test harness (`tests/` folder or `vitest` config) was generated.
+3.  **Completeness:** ❌ The loop halted due to `Archon` connectivity (timeout) and `mcp-scaffolder` dependency issues.
+
+**Lesson:** **The "Harness Loop" is incomplete without a Test Harness.**
+We cannot practice TDD if the scaffolder doesn't give us a test environment.
+
+**Recommendation:** Update `mcp-scaffolder` template to include:
+- `tests/` directory
+- `vitest` dependency
+- `basic.test.ts` to verify the "health check"
+
+### 11. The "Archon-First" Friction (Connectivity)
+**Observation:** The strict "Archon-First" rule halted work because the Agent couldn't connect to `localhost:8051`, even though the tunnel was up.
+- **Cause:** `mcp_config.json` default timeout was too short for tunnel latency.
+- **Fix:** Added `"timeout": 60` to config.
+
+**Lesson:** **Resilience is required for the Task Manager.**
+If the Task Manager (Archon) is unreachable, the Agent is paralyzed.
+1.  **Config:** Always set high timeouts for tunneled MCPs.
+2.  **Strategy:** Use public URLs (Cloudflare Access) instead of raw tunnels for critical infrastructure.
+
+### 12. "Bootstrapping" Paradox
+**Observation:** We needed `mcp-scaffolder` to create the project, but `mcp-scaffolder` crashed because it lacked the `mcp` dependency (which we hadn't installed yet).
+
+**Lesson:** **Tools must be runnable in "CLI Mode" without heavy dependencies.**
+
+### Session 2025-12-18: Tunnel Manager Implementation
+
+#### 13. "Mock-First" Testing for Infrastructure Tools
+**Observation:** When building MCPs that modify system state (like editing config files or running shell commands), "Unit Tests" often aren't enough, but "E2E Tests" are too dangerous.
+**Solution:** We created `src/test-e2e.ts` which uses the *real* tool logic but points to *temporary* mock config/ledger paths via environment variables (`TUNNEL_CONFIG_PATH=./test.yml`).
+**Benefit:** verified the full toolchain (parsing, locking, logic, file I/O) without risking the user's actual production setup. This should be a standard pattern for all "Infrastructure" MCPs.
+
+#### 14. The "Managed Block" Pattern Confirmed
+**Observation:** We needed to manage a Cloudflare config file that the user also manually edits.
+**Solution:** The strategy of using `ZUROT-MANAGED-START` and `END` config/ledger markers proved highly effective.
+**Detail:** We used string splitting to find the block, but a YAML parser *inside* the block. This preserved comments and structure *outside* the block perfectly, which a full Load -> Edit -> Dump cycle would have destroyed.
+
+#### 15. The "Dual-Ledger" Drift Problem
+**Observation:** We maintain two sources of truth: `config.yml` (Cloudflare Routing) and `run-state.json` (Ownership Metadata).
+**Risk:** If `cloudflared` fails or the process crashes between updating Config and updating Ledger, they drift.
+**Mitigation:** `create_tunnel` uses "Config First" (action) then "Ledger Second" (record). `list_tunnels` reads *both* and attempts to correlate.
+**Lesson:** Infrastructure tools must assume drift can happen and handle it gracefully (e.g., listing a tunnel as "active" in config but "unknown" in ledger if missing metadata).
+
+#### 16. Concurrency Locking is Mandatory
+**Observation:** Even for a single-user agent, file locking (`.lock`) was critical.
+**Detail:** We verified this with `src/test-lock.ts`. rapid-fire tool calls would race to read/write the config file. The `retry` + `stale check` logic is a reusable component for all future file-based MCPs.
+
+#### 17. The "Vite Host Header" Trap
+**Context:** Modern dev servers (Vite, Webpack) reject requests where the `Host` header doesn't match `localhost` (DNS Rebinding protection).
+**Issue:** Cloudflare Tunnels forward the public hostname (e.g., `ark-on.zurielyahav.com`) as the `Host` header by default. This causes the local server to reject the connection with "Host not allowed".
+**Fix:** We must explicitly configure `originRequest: httpHostHeader: "localhost"` in the Cloudflare ingress rule.
+**Action:** The `create_tunnel` tool was patched to include this automatically for all new tunnels.
+
+#### 18. The "Zombie Ledger" & Desync
+**Context:** If a tunnel is deleted from `config.yml` manually (or via a failed script) but remains in `run-state.json`, the tool thinks it exists ("no-op").
+**Issue:** `create_tunnel` checks the ledger first for idempotency. If the ledger is stale, you cannot recreate the tunnel.
+**Fix:** We need a "Force Reconcile" or "Janitor" tool. For now, manual remediation involves deleting the specific key from `run-state.json`.
+
+#### 19. YAML Artifacts ("The Empty Array")
+**Context:** When using simple string manipulation or regex to append to YAML, beware of flow-style artifacts like empty arrays `[]` left behind by parsers or previous edits.
+**Issue:** Cloudflare's YAML parser is strict. An errant `[]` line caused the service to fail to restart (`could not find expected ':'`).
+**Fix:** Always sanitize input strings (trim, remove artifacts) before appending to the managed block.

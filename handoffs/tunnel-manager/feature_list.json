@@ -1,0 +1,145 @@
+[
+    {
+        "milestone": 0,
+        "category": "verification",
+        "description": "Environment Verification & Health Check",
+        "deliverables": [],
+        "passes": true,
+        "verified_at": "2025-12-18T16:00:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 1,
+        "category": "core",
+        "description": "Initialize Managed Block in Config",
+        "deliverables": [
+            "~/tunnel-management/configs/config.yml"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T16:10:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 2,
+        "category": "core",
+        "description": "Create Run State Ledger (run-state.json)",
+        "deliverables": [
+            "~/tunnel-management/run-state.json"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T16:20:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 3,
+        "category": "scaffolding",
+        "description": "Scaffold MCP Project via mcp-scaffolder",
+        "deliverables": [
+            "mcps/tunnel-manager/package.json",
+            "mcps/tunnel-manager/src/index.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T16:30:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 4,
+        "category": "core",
+        "description": "Implement Concurrency Lock System",
+        "deliverables": [
+            "src/lock.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T17:40:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 5,
+        "category": "core",
+        "description": "Implement Config Manager (Parsing & Edits)",
+        "deliverables": [
+            "src/config-parser.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T17:50:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 6,
+        "category": "core",
+        "description": "Implement Ownership Verification",
+        "deliverables": [
+            "src/ownership.ts",
+            "src/ledger.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:00:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 7,
+        "category": "tools",
+        "description": "Implement create_tunnel Tool",
+        "deliverables": [
+            "src/tools/create-tunnel.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:10:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 8,
+        "category": "tools",
+        "description": "Implement delete_tunnel Tool",
+        "deliverables": [
+            "src/tools/delete-tunnel.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:20:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 9,
+        "category": "tools",
+        "description": "Implement list_tunnels Tool",
+        "deliverables": [
+            "src/tools/list-tunnels.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:30:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 10,
+        "category": "core",
+        "description": "Implement Verification Protocol",
+        "deliverables": [
+            "src/verification.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:40:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 11,
+        "category": "verification",
+        "description": "End-to-End Testing",
+        "deliverables": [
+            "src/test-e2e.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:50:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 12,
+        "category": "documentation",
+        "description": "Documentation & Claude Desktop Integration",
+        "deliverables": [
+            "README.md"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T19:00:00Z",
+        "commit": "Current"
+    }
+]

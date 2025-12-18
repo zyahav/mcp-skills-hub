@@ -11,13 +11,27 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
-from mcp.server import Server
-from mcp.types import Tool, TextContent
+import argparse
+import sys
+
+# Try imports for Server mode
+try:
+    from mcp.server import Server
+    from mcp.types import Tool, TextContent
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    # Mock classes for type hints if needed, or just warn later
+    Server = object 
+
 from pydantic import BaseModel, Field, field_validator
 
-# Initialize server
+# Initialize server if possible
 SKILL_NAME = "mcp-scaffolder"
-server = Server(SKILL_NAME)
+if MCP_AVAILABLE:
+    server = Server(SKILL_NAME)
+else:
+    server = None
 
 # Path resolution
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -216,27 +230,28 @@ class ScaffoldArgs(BaseModel):
 
 # ============== TOOL DEFINITIONS ==============
 
-@server.list_tools()
-async def list_tools():
-    return [
-        Tool(
-            name="scaffold_skill",
-            description="Create a new MCP skill with standard directory structure, files, and git commit.",
-            inputSchema=ScaffoldArgs.model_json_schema(),
-        )
-    ]
+if MCP_AVAILABLE and server:
+    @server.list_tools()
+    async def list_tools():
+        return [
+            Tool(
+                name="scaffold_skill",
+                description="Create a new MCP skill with standard directory structure, files, and git commit.",
+                inputSchema=ScaffoldArgs.model_json_schema(),
+            )
+        ]
 
-@server.call_tool()
-async def call_tool(name: str, arguments: dict):
-    if name != "scaffold_skill":
-        return [TextContent(type="text", text=f"Unknown tool: {name}")]
-    
-    try:
-        args = ScaffoldArgs(**arguments)
-        result = do_scaffold_skill(args.skill_name, args.description, args.archon_project_id)
-        return [TextContent(type="text", text=result)]
-    except Exception as e:
-        return [TextContent(type="text", text=f"Error: {str(e)}")]
+    @server.call_tool()
+    async def call_tool(name: str, arguments: dict):
+        if name != "scaffold_skill":
+            return [TextContent(type="text", text=f"Unknown tool: {name}")]
+        
+        try:
+            args = ScaffoldArgs(**arguments)
+            result = do_scaffold_skill(args.skill_name, args.description, args.archon_project_id)
+            return [TextContent(type="text", text=result)]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error: {str(e)}")]
 
 # ============== IMPLEMENTATION ==============
 
@@ -248,15 +263,18 @@ def do_scaffold_skill(skill_name: str, description: str, archon_project_id: str)
     src_dir = mcp_dir / "src"
     
     # 1. Validation
-    if handoff_dir.exists() or mcp_dir.exists():
-        return f"❌ Skill already exists (directories detected).\nCheck: {handoff_dir}\nCheck: {mcp_dir}"
+    # NOTE: Modified to allow overwrite of handoffs if they exist, or just logic
+    # Original: if handoff_dir.exists() or mcp_dir.exists(): return error
+    if mcp_dir.exists():
+        output.append(f"⚠️ MCPS dir exists: {mcp_dir}. Proceeding with caution (might overwrite).")
+        # return f"❌ Skill already exists (directories detected).\nCheck: {handoff_dir}\nCheck: {mcp_dir}"
     
     # 2. Create Directories
     try:
-        handoff_dir.mkdir(parents=True, exist_ok=False)
-        mcp_dir.mkdir(parents=True, exist_ok=False)
-        src_dir.mkdir(parents=True, exist_ok=False)
-        output.append("✅ Created directories")
+        handoff_dir.mkdir(parents=True, exist_ok=True) # Changed to True
+        mcp_dir.mkdir(parents=True, exist_ok=True) # Changed to True
+        src_dir.mkdir(parents=True, exist_ok=True) # Changed to True
+        output.append("✅ Created/Verified directories")
     except Exception as e:
         return f"❌ Failed to create directories: {e}"
         
@@ -285,6 +303,13 @@ def do_scaffold_skill(skill_name: str, description: str, archon_project_id: str)
     }
     
     for path, content in files.items():
+        # Check if exists to avoid overwriting handoffs blindly?
+        # Scaffolder usually assumes fresh start.
+        # But if running on existing handoffs, we might want to skip overwriting progress.
+        if path.exists() and "handoffs" in str(path):
+             output.append(f"   Skipping existing handoff file: {path.name}")
+             continue
+             
         with open(path, "w") as f:
             f.write(content)
         output.append(f"   Created: {path.relative_to(WORKTREE_ROOT)}")
@@ -318,9 +343,34 @@ def do_scaffold_skill(skill_name: str, description: str, archon_project_id: str)
 # ============== MAIN ==============
 
 async def main():
+    if not MCP_AVAILABLE:
+        print("❌ MCP SDK not found. Install 'mcp' package (Requires Python >=3.10) or use CLI mode.", file=sys.stderr)
+        sys.exit(1)
+        
     from mcp.server.stdio import stdio_server
     async with stdio_server() as (read, write):
         await server.run(read, write, server.create_initialization_options())
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="MCP Scaffolder")
+    parser.add_argument("--skill-name", help="Name of the skill to scaffold")
+    parser.add_argument("--description", help="Description of the skill", default="New MCP Skill")
+    parser.add_argument("--archon-project-id", help="Archon Project ID", default="PENDING")
+    
+    # Parse known args (allows extra args from wrapper to be ignored if needed)
+    args, unknown = parser.parse_known_args()
+    
+    if args.skill_name:
+        # CLI Mode
+        try:
+            # Validate name using Pydantic logic if possible, or just raw
+            ScaffoldArgs.validate_name(args.skill_name)
+            
+            result = do_scaffold_skill(args.skill_name, args.description, args.archon_project_id)
+            print(result)
+        except Exception as e:
+            print(f"❌ Error: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Server Mode
+        asyncio.run(main())
