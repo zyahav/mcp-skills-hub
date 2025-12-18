@@ -3,39 +3,77 @@
 **Status:** 🟡 IN PROGRESS (Milestone 2 in review)
 **Archon Project ID:** `1f1b0204-a804-4266-a451-4d37d0cd25e0`
 
+## Context (Why This Exists)
+
+We're building a **standalone Bitwarden MCP** to replace ad-hoc `bw + jq` parsing in wrapper.sh scripts.
+
+**Current state (Cloudflare DNS):**
+```bash
+# wrapper.sh - messy, duplicated logic
+ITEM_JSON=$(bw get item "Cloudflare DNS Manager")
+export CLOUDFLARE_API_TOKEN=$(echo "$ITEM_JSON" | jq -r '.fields[] | select(.name=="CLOUDFLARE_API_TOKEN") | .value')
+```
+
+**Future state (after this MCP):**
+```bash
+# wrapper.sh - clean, centralized
+export CLOUDFLARE_API_TOKEN=$(bitwarden-mcp get-secret "Cloudflare DNS Manager" "CLOUDFLARE_API_TOKEN")
+```
+
+## Architecture (SETTLED - Don't Re-discuss)
+
+```
+bitwarden_client.ts (sacred core - R1-R8 rules enforced)
+├── CLI: bitwarden-mcp get-secret "item" "field"  → for wrapper.sh
+└── MCP: bitwarden_get_secret(item, field)        → for agents
+```
+
+See `LESSONS_LEARNED.md` for why alternatives were rejected.
+
 ## Current State
 
-### Completed
-- ✅ Milestone 1: Scaffolding (done)
-- ✅ Milestone 2: Client Implementation (in review)
-  - `bitwarden_client.ts` - core with R1-R8
-  - `cli.ts` - CLI interface
-  - 13 tests passing
+| Milestone | Status | Verification |
+|-----------|--------|--------------|
+| 1. Scaffolding | ✅ done | `ls mcps/bitwarden` |
+| 2. Client Implementation | 🟡 review | `npm test` → 13 pass |
+| 3. MCP Server | ⬜ todo | `npm run build` |
+| 4. Integration | ⬜ todo | Live test with mcp-cli |
 
-### Next Task
-**Milestone 3: MCP Server Implementation**
-- Update `src/index.ts` to expose real tools
-- `bitwarden_get_secret(item, field)`
-- `bitwarden_get_notes(item)`
-- Verify: `npm run build`
-
-## Quick Start for Next Session
+## Quick Start
 
 ```bash
-cd mcps/bitwarden
-npm test        # Should show 13 passing
+cd /Users/zyahav/Documents/dev/mcp-skills-hub-monorepo/mcp-skills-hub-feature-cloudflare-dns/mcps/bitwarden
+npm test        # 13 tests should pass
 npm run build   # Should succeed
 ```
 
-Then check Archon:
+Check Archon for tasks:
 ```
 find_tasks(project_id="1f1b0204-a804-4266-a451-4d37d0cd25e0")
 ```
 
-## Architecture (SETTLED - Don't re-discuss)
+Full spec is in Archon:
+```
+find_documents(project_id="1f1b0204-a804-4266-a451-4d37d0cd25e0")
+```
 
-See LESSONS_LEARNED.md. Summary:
-- One core (`bitwarden_client.ts`)
-- Two interfaces: CLI + MCP
-- Wrappers use CLI at startup
-- Agents use MCP tools
+## Next Task (Milestone 3)
+
+Update `src/index.ts` to expose real MCP tools:
+- `bitwarden_get_secret(item, field)` 
+- `bitwarden_get_notes(item)`
+
+Both use `BitwardenClient` from `bitwarden_client.ts`.
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/bitwarden_client.ts` | Sacred core - all bw access here |
+| `src/cli.ts` | CLI for wrapper.sh scripts |
+| `src/index.ts` | MCP server (needs update in M3) |
+| `src/__tests__/bitwarden_client.test.ts` | 13 unit tests |
+
+## After This MCP is Done
+
+Refactor `mcps/cloudflare-dns/wrapper.sh` to use `bitwarden-mcp` CLI instead of raw bw + jq.
