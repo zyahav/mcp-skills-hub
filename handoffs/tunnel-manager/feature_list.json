@@ -5,7 +5,7 @@
         "description": "Environment Verification & Health Check",
         "deliverables": [],
         "passes": true,
-        "verified_at": "2025-12-18",
+        "verified_at": "2025-12-18T16:00:00Z",
         "commit": "Current"
     },
     {
@@ -16,7 +16,7 @@
             "~/tunnel-management/configs/config.yml"
         ],
         "passes": true,
-        "verified_at": "2025-12-18",
+        "verified_at": "2025-12-18T16:10:00Z",
         "commit": "Current"
     },
     {
@@ -27,7 +27,7 @@
             "~/tunnel-management/run-state.json"
         ],
         "passes": true,
-        "verified_at": "2025-12-18",
+        "verified_at": "2025-12-18T16:20:00Z",
         "commit": "Current"
     },
     {
@@ -39,7 +39,7 @@
             "mcps/tunnel-manager/src/index.ts"
         ],
         "passes": true,
-        "verified_at": "2025-12-18",
+        "verified_at": "2025-12-18T16:30:00Z",
         "commit": "Current"
     },
     {
@@ -49,8 +49,97 @@
         "deliverables": [
             "src/lock.ts"
         ],
-        "passes": false,
-        "verified_at": null,
-        "commit": null
+        "passes": true,
+        "verified_at": "2025-12-18T17:40:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 5,
+        "category": "core",
+        "description": "Implement Config Manager (Parsing & Edits)",
+        "deliverables": [
+            "src/config-parser.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T17:50:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 6,
+        "category": "core",
+        "description": "Implement Ownership Verification",
+        "deliverables": [
+            "src/ownership.ts",
+            "src/ledger.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:00:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 7,
+        "category": "tools",
+        "description": "Implement create_tunnel Tool",
+        "deliverables": [
+            "src/tools/create-tunnel.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:10:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 8,
+        "category": "tools",
+        "description": "Implement delete_tunnel Tool",
+        "deliverables": [
+            "src/tools/delete-tunnel.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:20:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 9,
+        "category": "tools",
+        "description": "Implement list_tunnels Tool",
+        "deliverables": [
+            "src/tools/list-tunnels.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:30:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 10,
+        "category": "core",
+        "description": "Implement Verification Protocol",
+        "deliverables": [
+            "src/verification.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:40:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 11,
+        "category": "verification",
+        "description": "End-to-End Testing",
+        "deliverables": [
+            "src/test-e2e.ts"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T18:50:00Z",
+        "commit": "Current"
+    },
+    {
+        "milestone": 12,
+        "category": "documentation",
+        "description": "Documentation & Claude Desktop Integration",
+        "deliverables": [
+            "README.md"
+        ],
+        "passes": true,
+        "verified_at": "2025-12-18T19:00:00Z",
+        "commit": "Current"
     }
 ]

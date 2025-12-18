@@ -258,5 +258,41 @@ If the Task Manager (Archon) is unreachable, the Agent is paralyzed.
 **Observation:** We needed `mcp-scaffolder` to create the project, but `mcp-scaffolder` crashed because it lacked the `mcp` dependency (which we hadn't installed yet).
 
 **Lesson:** **Tools must be runnable in "CLI Mode" without heavy dependencies.**
-We patched `server.py` to run as a standalone CLI script even if `mcp` SDK imports failed. This allowed us to bootstrap the project despite environment issues.
 
+### Session 2025-12-18: Tunnel Manager Implementation
+
+#### 13. "Mock-First" Testing for Infrastructure Tools
+**Observation:** When building MCPs that modify system state (like editing config files or running shell commands), "Unit Tests" often aren't enough, but "E2E Tests" are too dangerous.
+**Solution:** We created `src/test-e2e.ts` which uses the *real* tool logic but points to *temporary* mock config/ledger paths via environment variables (`TUNNEL_CONFIG_PATH=./test.yml`).
+**Benefit:** verified the full toolchain (parsing, locking, logic, file I/O) without risking the user's actual production setup. This should be a standard pattern for all "Infrastructure" MCPs.
+
+#### 14. The "Managed Block" Pattern Confirmed
+**Observation:** We needed to manage a Cloudflare config file that the user also manually edits.
+**Solution:** The strategy of using `ZUROT-MANAGED-START` and `END` config/ledger markers proved highly effective.
+**Detail:** We used string splitting to find the block, but a YAML parser *inside* the block. This preserved comments and structure *outside* the block perfectly, which a full Load -> Edit -> Dump cycle would have destroyed.
+
+#### 15. The "Dual-Ledger" Drift Problem
+**Observation:** We maintain two sources of truth: `config.yml` (Cloudflare Routing) and `run-state.json` (Ownership Metadata).
+**Risk:** If `cloudflared` fails or the process crashes between updating Config and updating Ledger, they drift.
+**Mitigation:** `create_tunnel` uses "Config First" (action) then "Ledger Second" (record). `list_tunnels` reads *both* and attempts to correlate.
+**Lesson:** Infrastructure tools must assume drift can happen and handle it gracefully (e.g., listing a tunnel as "active" in config but "unknown" in ledger if missing metadata).
+
+#### 16. Concurrency Locking is Mandatory
+**Observation:** Even for a single-user agent, file locking (`.lock`) was critical.
+**Detail:** We verified this with `src/test-lock.ts`. rapid-fire tool calls would race to read/write the config file. The `retry` + `stale check` logic is a reusable component for all future file-based MCPs.
+
+#### 17. The "Vite Host Header" Trap
+**Context:** Modern dev servers (Vite, Webpack) reject requests where the `Host` header doesn't match `localhost` (DNS Rebinding protection).
+**Issue:** Cloudflare Tunnels forward the public hostname (e.g., `ark-on.zurielyahav.com`) as the `Host` header by default. This causes the local server to reject the connection with "Host not allowed".
+**Fix:** We must explicitly configure `originRequest: httpHostHeader: "localhost"` in the Cloudflare ingress rule.
+**Action:** The `create_tunnel` tool was patched to include this automatically for all new tunnels.
+
+#### 18. The "Zombie Ledger" & Desync
+**Context:** If a tunnel is deleted from `config.yml` manually (or via a failed script) but remains in `run-state.json`, the tool thinks it exists ("no-op").
+**Issue:** `create_tunnel` checks the ledger first for idempotency. If the ledger is stale, you cannot recreate the tunnel.
+**Fix:** We need a "Force Reconcile" or "Janitor" tool. For now, manual remediation involves deleting the specific key from `run-state.json`.
+
+#### 19. YAML Artifacts ("The Empty Array")
+**Context:** When using simple string manipulation or regex to append to YAML, beware of flow-style artifacts like empty arrays `[]` left behind by parsers or previous edits.
+**Issue:** Cloudflare's YAML parser is strict. An errant `[]` line caused the service to fail to restart (`could not find expected ':'`).
+**Fix:** Always sanitize input strings (trim, remove artifacts) before appending to the managed block.

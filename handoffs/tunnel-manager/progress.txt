@@ -9,3 +9,13 @@
 - [EXEC] Milestone 1: Initialized Managed Block in `config.yml` (added markers).
 - [EXEC] Milestone 2: Created Run State Ledger at `~/tunnel-management/run-state.json`.
 - [TODO] Ready for Milestone 4: Concurrency Lock System.
+- [EXEC] Milestone 4: Implemented Concurrency Lock System (`src/lock.ts`). Verified with `test-lock.ts`.
+- [EXEC] Milestone 5: Implemented Config Parser (`src/config-parser.ts`). Verified with `test-parser.ts`.
+- [EXEC] Milestone 6: Implemented Ownership Verification (`src/ownership.ts`). Verified with `test-ownership.ts`.
+- [EXEC] Milestone 7: Implemented `create_tunnel` Tool. Verified config updates.
+- [EXEC] Milestone 8: Implemented `delete_tunnel` Tool. Verified safety checks.
+- [EXEC] Milestone 9: Implemented `list_tunnels` Tool. Verified filtering.
+- [EXEC] Milestone 10: Implemented Verification Protocol (`src/verification.ts`).
+- [TEST] Milestone 11: Passed End-to-End Tests (`test-e2e.ts`).
+- [DOCS] Milestone 12: Updated `README.md` and feature list.
+- [DONE] All milestones complete. Ready for deployment.
