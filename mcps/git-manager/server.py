@@ -426,14 +426,21 @@ def do_release_merge(push: bool, ff_only: bool) -> str:
     """Merge dev into main for release."""
     output = ["=== RELEASE MERGE: dev → main ===\n"]
     
+    # Define main worktree path
+    MAIN_WORKTREE = REPO_ROOT / "mcp-skills-hub-main"
+    
+    # Verify main worktree exists
+    if not MAIN_WORKTREE.exists():
+        return f"❌ Main worktree not found at {MAIN_WORKTREE}"
+    
     # Update main
     output.append("Fetching and updating main...")
-    run_git(["fetch", "origin", "main:main"], REPO_ROOT)
-    run_git(["checkout", "main"], REPO_ROOT)
-    run_git(["pull", "origin", "main"], REPO_ROOT)
+    run_git(["fetch", "origin", "main:main"], MAIN_WORKTREE)
+    run_git(["checkout", "main"], MAIN_WORKTREE)
+    run_git(["pull", "origin", "main"], MAIN_WORKTREE)
     
     # Update dev reference
-    run_git(["fetch", "origin", "dev:dev"], REPO_ROOT)
+    run_git(["fetch", "origin", "dev:dev"], MAIN_WORKTREE)
     
     # Merge dev into main
     merge_cmd = ["merge", "dev"]
@@ -443,7 +450,7 @@ def do_release_merge(push: bool, ff_only: bool) -> str:
         merge_cmd.extend(["--no-ff", "-m", "Merge dev into main for release"])
     
     output.append("Merging dev into main...")
-    result = run_git(merge_cmd, REPO_ROOT)
+    result = run_git(merge_cmd, MAIN_WORKTREE)
     output.append(format_result(result))
     
     if result.returncode != 0:
@@ -455,7 +462,7 @@ def do_release_merge(push: bool, ff_only: bool) -> str:
     # Push if requested
     if push:
         output.append("\nPushing main to origin...")
-        push_result = run_git(["push", "origin", "main"], REPO_ROOT)
+        push_result = run_git(["push", "origin", "main"], MAIN_WORKTREE)
         output.append(format_result(push_result))
     
     output.append("\n✅ Release merge complete!")
@@ -466,15 +473,22 @@ def do_tag_release(version: str, message: Optional[str], push: bool) -> str:
     """Create a release tag on main."""
     output = [f"=== TAGGING RELEASE: {version} ===\n"]
     
+    # Define main worktree path
+    MAIN_WORKTREE = REPO_ROOT / "mcp-skills-hub-main"
+    
+    # Verify main worktree exists
+    if not MAIN_WORKTREE.exists():
+        return f"❌ Main worktree not found at {MAIN_WORKTREE}"
+    
     if not message:
         message = f"Release {version}"
     
     # Make sure we're on main
-    run_git(["checkout", "main"], REPO_ROOT)
+    run_git(["checkout", "main"], MAIN_WORKTREE)
     
     # Create annotated tag
     output.append(f"Creating tag {version}...")
-    result = run_git(["tag", "-a", version, "-m", message], REPO_ROOT)
+    result = run_git(["tag", "-a", version, "-m", message], MAIN_WORKTREE)
     
     if result.returncode != 0:
         return f"❌ Failed to create tag:\n{format_result(result)}"
@@ -484,7 +498,7 @@ def do_tag_release(version: str, message: Optional[str], push: bool) -> str:
     # Push tag if requested
     if push:
         output.append(f"\nPushing tag to origin...")
-        push_result = run_git(["push", "origin", version], REPO_ROOT)
+        push_result = run_git(["push", "origin", version], MAIN_WORKTREE)
         output.append(format_result(push_result))
     
     return "\n".join(output)
