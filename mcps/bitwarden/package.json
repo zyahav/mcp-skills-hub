@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "mcp-bitwarden": "./build/index.js"
+    "mcp-bitwarden": "./build/index.js",
+    "bitwarden-mcp": "./build/cli.js"
   },
   "scripts": {
-    "build": "tsc && chmod +x build/index.js",
+    "build": "tsc && chmod +x build/index.js build/cli.js",
     "start": "node build/index.js",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
@@ -16,6 +19,7 @@
   },
   "devDependencies": {
     "typescript": "^5.0.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "vitest": "^2.0.0"
   }
 }
