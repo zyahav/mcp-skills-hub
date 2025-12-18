@@ -15,6 +15,7 @@ echo "Retrieving secrets from Bitwarden..." >&2
 # Retrieve secrets using bitwarden-mcp CLI (centralized, safe, no jq)
 export CLOUDFLARE_API_TOKEN=$(node "$BITWARDEN_CLI" get-secret "Cloudflare DNS Manager" "CLOUDFLARE_API_TOKEN")
 export CLOUDFLARE_ZONE_ID=$(node "$BITWARDEN_CLI" get-secret "Cloudflare DNS Manager" "CLOUDFLARE_ZONE_ID")
+export CLOUDFLARE_ZONE_NAME=$(node "$BITWARDEN_CLI" get-secret "Cloudflare DNS Manager" "CLOUDFLARE_ZONE_NAME" || true)
 
 if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ZONE_ID" ]; then
     echo "Error: Failed to retrieve secrets from Bitwarden." >&2

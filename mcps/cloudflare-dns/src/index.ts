@@ -1,3 +1,4 @@
+import axios from "axios";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -12,13 +13,32 @@ import {
 
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
-
 if (!CLOUDFLARE_API_TOKEN || !CLOUDFLARE_ZONE_ID) {
   console.error("Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID environment variables are required.");
   process.exit(1);
 }
 
-const client = new CloudflareClient(CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONE_ID);
+let client: CloudflareClient;
+
+async function resolveZoneName(): Promise<string> {
+  if (process.env.CLOUDFLARE_ZONE_NAME) {
+    return process.env.CLOUDFLARE_ZONE_NAME;
+  }
+
+  // Fallback: fetch the zone name from Cloudflare using the zone ID
+  const resp = await axios.get(`https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}`, {
+    headers: {
+      Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!resp.data?.success || !resp.data?.result?.name) {
+    throw new Error(`Unable to resolve zone name for zone id ${CLOUDFLARE_ZONE_ID}: ${JSON.stringify(resp.data?.errors || resp.data)}`);
+  }
+
+  return resp.data.result.name;
+}
 const server = new McpServer({
   name: "cloudflare-dns",
   version: "1.0.0",
@@ -143,7 +163,71 @@ server.tool(
   }
 );
 
+server.tool(
+  "list_dns_records",
+  "List DNS records for a subdomain (and optional type). Returns IDs to resolve duplicates.",
+  {
+    subdomain: z.string().describe("The subdomain to list."),
+    type: z.enum(["A", "CNAME", "TXT"]).optional().describe("Optional type filter."),
+  },
+  async ({ subdomain, type }) => {
+    try {
+      validateSubdomain(subdomain);
+      if (type) validateRecordType(type);
+      const records = await client.listRecords(subdomain, type);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(records.map(r => ({
+            id: r.id,
+            name: r.name,
+            type: r.type,
+            content: r.content,
+            proxied: r.proxied
+          })), null, 2)
+        }]
+      };
+    } catch (error: any) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${error.message}` }]
+      };
+    }
+  }
+);
+
+server.tool(
+  "delete_dns_record_by_id",
+  "Delete a DNS record by its Cloudflare record ID (for resolving duplicates safely).",
+  {
+    id: z.string().describe("The Cloudflare DNS record ID."),
+    subdomain: z.string().describe("The subdomain (used for validation/logging)."),
+    type: z.enum(["A", "CNAME", "TXT"]).optional().describe("Optional type filter."),
+  },
+  async ({ id, subdomain, type }) => {
+    try {
+      validateSubdomain(subdomain);
+      if (type) validateRecordType(type);
+      await client.deleteRecord(id);
+      return {
+        content: [{ type: "text", text: `Successfully deleted record ${id} for ${subdomain}` }]
+      };
+    } catch (error: any) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${error.message}` }]
+      };
+    }
+  }
+);
+
 async function main() {
+  const zoneName = await resolveZoneName();
+  client = new CloudflareClient(
+    CLOUDFLARE_API_TOKEN!,
+    CLOUDFLARE_ZONE_ID!,
+    zoneName
+  );
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Cloudflare DNS MCP Server running on stdio");
