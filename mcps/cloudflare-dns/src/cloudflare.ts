@@ -27,6 +27,8 @@ export interface UpdateRecordParams {
   comment?: string;
 }
 
+const ZONE_DOMAIN = 'zurielyahav.com';
+
 export class CloudflareClient {
   private api: AxiosInstance;
 
@@ -40,9 +42,19 @@ export class CloudflareClient {
     });
   }
 
-  async listRecords(name?: string, type?: string): Promise<DNSRecord[]> {
+  /**
+   * Convert subdomain to FQDN for Cloudflare API queries
+   */
+  private toFQDN(subdomain: string): string {
+    if (subdomain.endsWith(ZONE_DOMAIN)) {
+      return subdomain;
+    }
+    return `${subdomain}.${ZONE_DOMAIN}`;
+  }
+
+  async listRecords(subdomain?: string, type?: string): Promise<DNSRecord[]> {
     const params: any = {};
-    if (name) params.name = name;
+    if (subdomain) params.name = this.toFQDN(subdomain);
     if (type) params.type = type;
 
     try {
@@ -56,6 +68,7 @@ export class CloudflareClient {
     }
   }
 
+
   async createRecord(record: CreateRecordParams): Promise<DNSRecord> {
     try {
       const response = await this.api.post(`/zones/${this.zoneId}/dns_records`, record);
@@ -64,9 +77,9 @@ export class CloudflareClient {
       }
       return response.data.result;
     } catch (error: any) {
-         if (axios.isAxiosError(error) && error.response) {
-            throw new Error(`Failed to create record: ${JSON.stringify(error.response.data)}`);
-         }
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(`Failed to create record: ${JSON.stringify(error.response.data)}`);
+      }
       throw new Error(`Failed to create record: ${error.message}`);
     }
   }
@@ -79,9 +92,9 @@ export class CloudflareClient {
       }
       return response.data.result;
     } catch (error: any) {
-        if (axios.isAxiosError(error) && error.response) {
-            throw new Error(`Failed to update record: ${JSON.stringify(error.response.data)}`);
-         }
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(`Failed to update record: ${JSON.stringify(error.response.data)}`);
+      }
       throw new Error(`Failed to update record: ${error.message}`);
     }
   }
@@ -90,12 +103,12 @@ export class CloudflareClient {
     try {
       const response = await this.api.delete(`/zones/${this.zoneId}/dns_records/${id}`);
       if (!response.data.success) {
-         throw new Error(`Cloudflare API Error: ${JSON.stringify(response.data.errors)}`);
+        throw new Error(`Cloudflare API Error: ${JSON.stringify(response.data.errors)}`);
       }
     } catch (error: any) {
-        if (axios.isAxiosError(error) && error.response) {
-            throw new Error(`Failed to delete record: ${JSON.stringify(error.response.data)}`);
-         }
+      if (axios.isAxiosError(error) && error.response) {
+        throw new Error(`Failed to delete record: ${JSON.stringify(error.response.data)}`);
+      }
       throw new Error(`Failed to delete record: ${error.message}`);
     }
   }
