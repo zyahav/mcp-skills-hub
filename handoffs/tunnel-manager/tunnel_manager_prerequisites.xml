@@ -1,0 +1,612 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Zurot Standard: Tunnel Manager MCP - Prerequisites Specification
+  Version: 2.0
+  Status: SOURCE OF TRUTH
+  Last Updated: 2025-12-18
+-->
+
+<prerequisites_specification>
+  <metadata>
+    <project_name>Tunnel Manager MCP</project_name>
+    <skill_name>tunnel-manager</skill_name>
+    <version>2.0</version>
+    <owner>Zurot Standard</owner>
+    <scope>Cloudflare Tunnel management for *.zurielyahav.com</scope>
+    <environment>macOS (zsh)</environment>
+  </metadata>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 1: ACCOUNT ARCHITECTURE & ISOLATION STRATEGY                -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <account_architecture_strategy>
+    <principle>
+      Tunnel management operates in a SINGLE Cloudflare account with THREE explicit tunnel classes.
+      Production tunnels are read-only to automation. Development infrastructure is editable.
+      Ephemeral tunnels are fully managed and tied to feature branches.
+    </principle>
+
+    <tunnel_classification>
+      <class_a type="persistent_production">
+        <description>Production services - NEVER touched by MCP</description>
+        <characteristics>
+          <lifetime>Indefinite</lifetime>
+          <lifecycle>Human-only management</lifecycle>
+          <location>Outside managed block in config.yml</location>
+        </characteristics>
+        <examples>
+          <tunnel subdomain="speakit.zurielyahav.com" status="read_only"/>
+        </examples>
+        <governance>
+          <rule>MCP must NEVER modify, delete, or infer ownership</rule>
+          <rule>Treated as immutable infrastructure</rule>
+        </governance>
+      </class_a>
+
+      <class_b type="persistent_development">
+        <description>Development infrastructure - Editable by MCP</description>
+        <characteristics>
+          <lifetime>Indefinite</lifetime>
+          <lifecycle>MCP-managed (on-demand)</lifecycle>
+          <branch_tied>false</branch_tied>
+          <location>Outside managed block (but marked editable)</location>
+        </characteristics>
+        <examples>
+          <tunnel subdomain="vibetunnel.zurielyahav.com" port="4020"/>
+          <tunnel subdomain="agent-hub.zurielyahav.com" port="3000"/>
+          <tunnel subdomain="words-he.zurielyahav.com" port="8080"/>
+          <tunnel subdomain="speakitdev.zurielyahav.com" port="8082"/>
+          <tunnel subdomain="avatar.zurielyahav.com" port="5173"/>
+          <tunnel subdomain="voicetutor.zurielyahav.com" port="5175"/>
+          <tunnel subdomain="memorygameword2image.zurielyahav.com" port="8081"/>
+        </examples>
+        <governance>
+          <rule>MCP can create, edit, delete with user approval</rule>
+          <rule>Not subject to branch lifecycle cleanup</rule>
+          <rule>Ownership tracked in run-state.json</rule>
+        </governance>
+      </class_b>
+
+      <class_c type="managed_ephemeral">
+        <description>Feature-branch tunnels - Fully automated lifecycle</description>
+        <characteristics>
+          <lifetime>Finite (tied to feature branch)</lifetime>
+          <lifecycle>Automated (MCP-controlled)</lifecycle>
+          <branch_tied>true</branch_tied>
+          <location>Inside ZUROT-managed block in config.yml</location>
+        </characteristics>
+        <examples>
+          <tunnel subdomain="feature-auth-20251218-1430.zurielyahav.com" port="3001"/>
+          <tunnel subdomain="experiment-redesign-20251218.zurielyahav.com" port="3002"/>
+        </examples>
+        <governance>
+          <rule>MCP fully controls create/delete operations</rule>
+          <rule>Deleted when feature branch is merged or aborted</rule>
+          <rule>Subdomain includes RUN_ID for ownership tracking</rule>
+          <rule>Ownership verified via run-state.json</rule>
+        </governance>
+      </class_c>
+    </tunnel_classification>
+
+    <hard_boundary_rule>
+      ANY tunnel declared outside the ZUROT-managed block is persistent infrastructure
+      and MUST be treated as read-only by the MCP UNLESS explicitly marked as Class B.
+      
+      Violation → HARD ABORT with ERR_TUNNEL_002
+    </hard_boundary_rule>
+  </account_architecture_strategy>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 2: INFRASTRUCTURE PROVISIONING STATE                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <infrastructure_provisioning_state>
+    <cloudflare_tunnel>
+      <provider>Cloudflare Tunnel (cloudflared)</provider>
+      <tunnel_id>f4506e2a-03b3-40e8-a8ea-fd92a6747b3d</tunnel_id>
+      <tunnel_name>mobile-logs-tunnel</tunnel_name>
+      <zone>zurielyahav.com</zone>
+      <zone_id>f2a2f13f71948ecb72a09c2d7bb9e2cd</zone_id>
+      
+      <existing_configuration>
+        <config_file>~/tunnel-management/configs/config.yml</config_file>
+        <symlink_target>~/.cloudflared/config.yml</symlink_target>
+        <credentials>~/tunnel-management/configs/credentials.json</credentials>
+        <certificate>~/tunnel-management/configs/cert.pem</certificate>
+        
+        <supervisor>
+          <type>launchctl (macOS LaunchAgent)</type>
+          <plist>~/Library/LaunchAgents/com.cloudflare.cloudflared.plist</plist>
+          <auto_start>true</auto_start>
+          <restart_on_failure>true</restart_on_failure>
+        </supervisor>
+
+        <state_tracking>
+          <ledger>~/tunnel-management/run-state.json</ledger>
+          <lock_file>~/tunnel-management/.lock</lock_file>
+          <logs>~/tunnel-management/logs/</logs>
+        </state_tracking>
+      </existing_configuration>
+
+      <managed_block_contract>
+        <description>
+          The config.yml file MUST contain an explicitly delimited managed block:
+          
+          # --- ZUROT-MANAGED-START ---
+          # Managed exclusively by the Tunnel Manager MCP
+          [Class C ephemeral tunnels declared here]
+          # --- ZUROT-MANAGED-END ---
+          
+          The MCP may ONLY edit content within this block.
+          Content outside the block is BYTE-FOR-BYTE read-only.
+        </description>
+        <rules>
+          <rule>MCP edits ONLY inside managed block markers</rule>
+          <rule>Byte-preservation mandatory for content outside block</rule>
+          <rule>Full-file YAML reserialization FORBIDDEN</rule>
+          <rule>Comments and formatting must be preserved</rule>
+        </rules>
+      </managed_block_contract>
+
+      <current_persistent_tunnels>
+        <description>These exist OUTSIDE managed block - Class A and Class B</description>
+        <class_a>
+          <tunnel subdomain="speakit.zurielyahav.com" status="production" mcp_access="read_only"/>
+        </class_a>
+        <class_b>
+          <tunnel subdomain="mobile-logs.zurielyahav.com" port="3001"/>
+          <tunnel subdomain="words-he.zurielyahav.com" port="8080"/>
+          <tunnel subdomain="vibetunnel.zurielyahav.com" port="4020"/>
+          <tunnel subdomain="agent-hub.zurielyahav.com" port="3000"/>
+          <tunnel subdomain="playcanvas.zurielyahav.com" port="8083"/>
+          <tunnel subdomain="memorygameword2image.zurielyahav.com" port="8081"/>
+          <tunnel subdomain="speakitdev.zurielyahav.com" port="8082"/>
+          <tunnel subdomain="voicetutor.zurielyahav.com" port="5175"/>
+          <tunnel subdomain="avatar.zurielyahav.com" port="5173"/>
+        </class_b>
+      </current_persistent_tunnels>
+    </cloudflare_tunnel>
+
+    <process_authority_model>
+      <mode type="dev_mode" default="true">
+        <description>Primary mode - launchctl owns cloudflared lifecycle</description>
+        <authority>
+          <owner>launchctl (macOS LaunchAgent)</owner>
+          <mcp_allowed_actions>
+            <action>Edit managed config block</action>
+            <action>Verify running process (pgrep)</action>
+            <action>Verify network reachability</action>
+          </mcp_allowed_actions>
+          <mcp_forbidden_actions>
+            <action>Start cloudflared</action>
+            <action>Stop cloudflared</action>
+            <action>Restart cloudflared</action>
+          </mcp_forbidden_actions>
+        </authority>
+        <rationale>
+          In dev mode, the LaunchAgent maintains process stability.
+          MCP changes config but does NOT control lifecycle.
+          User must manually restart via: launchctl restart com.cloudflare.cloudflared
+        </rationale>
+      </mode>
+
+      <mode type="service_mode" implemented="false">
+        <description>Future mode - MCP may control lifecycle</description>
+        <status>Not currently implemented</status>
+        <requirement>If implemented, must be explicitly documented with supervisor commands</requirement>
+      </mode>
+    </process_authority_model>
+  </infrastructure_provisioning_state>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 3: SECRET VAULTING PREREQUISITES                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <secret_vaulting_prerequisites>
+    <provider>Bitwarden</provider>
+    <authentication>
+      <method>CLI with BW_SESSION environment variable</method>
+      <verification>bw status</verification>
+    </authentication>
+
+    <secret_discovery_protocol>
+      <step index="1">List folders: bw list folders</step>
+      <step index="2">Identify project folder: "Infrastructure" or "Tunnel Management"</step>
+      <step index="3">Search items within folder</step>
+      <step index="4">Extract specific custom field</step>
+    </secret_discovery_protocol>
+
+    <secret_map>
+      <description>
+        If tunnel credentials or API tokens are stored in Bitwarden,
+        they follow this mapping structure.
+        Currently, tunnel credentials exist as files on disk.
+      </description>
+      
+      <optional_item name="Cloudflare Tunnel Credentials">
+        <folder>Infrastructure</folder>
+        <item_name>mobile-logs-tunnel</item_name>
+        <fields>
+          <field name="TUNNEL_ID" custom="true"/>
+          <field name="ZONE_ID" custom="true"/>
+        </fields>
+      </optional_item>
+    </secret_map>
+
+    <write_policy>
+      <rule>Default: Read-only access to Bitwarden</rule>
+      <rule>Writes allowed ONLY when:</rule>
+      <condition>Secret did not previously exist</condition>
+      <condition>Environment is Dev or Test</condition>
+      <condition>Item name recorded in run-state.json ledger</condition>
+      <forbidden>Secret rotation is human-only</forbidden>
+    </write_policy>
+  </secret_vaulting_prerequisites>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 4: OWNERSHIP & STATE TRACKING                               -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <ownership_tracking>
+    <ledger_file>
+      <path>~/tunnel-management/run-state.json</path>
+      <purpose>Authoritative record of tunnel ownership and lifecycle</purpose>
+      <structure>
+        <example><![CDATA[
+{
+  "tunnels": {
+    "feature-auth-20251218-1430": {
+      "subdomain": "feature-auth-20251218-1430.zurielyahav.com",
+      "port": 3001,
+      "class": "managed_ephemeral",
+      "created_by": "agent-claude-001",
+      "feature_branch": "feature/authentication",
+      "run_id": "20251218-1430-a3b2c1",
+      "created_at": "2025-12-18T14:30:00Z",
+      "status": "active"
+    }
+  },
+  "metadata": {
+    "last_updated": "2025-12-18T14:30:00Z",
+    "schema_version": "1.0"
+  }
+}
+        ]]></example>
+      </structure>
+    </ledger_file>
+
+    <execution_context>
+      <description>Every MCP execution must establish context</description>
+      <required_variables>
+        <variable name="AGENT_ID" source="MCP runtime"/>
+        <variable name="FEATURE_BRANCH" command="git rev-parse --abbrev-ref HEAD"/>
+        <variable name="RUN_ID" format="YYYYMMDD-HHMM-{short-hash}"/>
+      </required_variables>
+    </execution_context>
+
+    <ownership_verification_rules>
+      <rule>A tunnel may be deleted ONLY if ownership can be proven</rule>
+      <proof_methods>
+        <method priority="1">Matching entry in run-state.json for active FEATURE_BRANCH</method>
+        <method priority="2">Subdomain contains active RUN_ID</method>
+        <method priority="3">Explicit user override command</method>
+      </proof_methods>
+      <failure_behavior>If ownership is ambiguous → HARD ABORT with ERR_TUNNEL_001</failure_behavior>
+    </ownership_verification_rules>
+
+    <concurrency_control>
+      <lock_file>
+        <path>~/tunnel-management/.lock</path>
+        <purpose>Prevent concurrent writes to config and ledger</purpose>
+        <timeout>30 seconds</timeout>
+        <stale_lock_behavior>Abort with diagnostic message</stale_lock_behavior>
+      </lock_file>
+      <required_for>
+        <operation>Write to config.yml managed block</operation>
+        <operation>Write to run-state.json</operation>
+      </required_for>
+    </concurrency_control>
+  </ownership_tracking>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 5: COMMAND GOVERNANCE (SANDBOX OF TRUST)                    -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <command_governance>
+    <allowed_without_approval>
+      <category name="read_only_system">
+        <command>ls</command>
+        <command>cat</command>
+        <command>pwd</command>
+        <command>date</command>
+        <command>whoami</command>
+      </category>
+
+      <category name="git_read_only">
+        <command>git status</command>
+        <command>git diff</command>
+        <command>git rev-parse</command>
+        <command>git log -n</command>
+      </category>
+
+      <category name="cloudflare_probes">
+        <command>cloudflared version</command>
+        <command>cloudflared tunnel list</command>
+        <command>cloudflared tunnel info</command>
+      </category>
+
+      <category name="network_verification">
+        <command>ping -c 3 google.com</command>
+        <command>dig +short [subdomain].zurielyahav.com</command>
+        <command>nslookup [subdomain].zurielyahav.com</command>
+        <command>curl -I https://[subdomain].zurielyahav.com</command>
+      </category>
+
+      <category name="process_checks">
+        <command>pgrep -f cloudflared</command>
+        <command>ps aux | grep cloudflared</command>
+      </category>
+    </allowed_without_approval>
+
+    <scoped_write_permissions>
+      <permission>Edit config.yml inside ZUROT-managed block only</permission>
+      <permission>Write to run-state.json</permission>
+      <permission>Acquire and release lock file</permission>
+      <permission>Append to logs/progress.txt</permission>
+    </scoped_write_permissions>
+
+    <forbidden_commands>
+      <command reason="destructive">rm -rf</command>
+      <command reason="security">chmod -R</command>
+      <command reason="security">chown -R</command>
+      <command reason="history_mutation">git reset --hard</command>
+      <command reason="history_mutation">git push --force</command>
+      <command reason="secret_exposure">cat .env*</command>
+      <command reason="secret_exposure">echo $SECRETS</command>
+    </forbidden_commands>
+
+    <approval_required>
+      Commands outside the allowed and scoped permissions require explicit user approval
+      before execution. The MCP must explain intent and wait for confirmation.
+    </approval_required>
+  </command_governance>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 6: ERROR CODE REGISTRY                                      -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <error_code_registry>
+    <format>ERR_TUNNEL_{NUMBER}: {description}</format>
+    
+    <error code="ERR_TUNNEL_001">
+      <message>Ownership ambiguous - cannot prove RUN_ID or branch ownership</message>
+      <context>Attempted to delete tunnel without clear ownership proof</context>
+      <resolution>Check run-state.json or provide explicit override</resolution>
+    </error>
+
+    <error code="ERR_TUNNEL_002">
+      <message>Apex protection violation - attempted to modify production tunnel</message>
+      <context>Operation would affect Class A (read-only) tunnel</context>
+      <resolution>Production tunnels must be modified manually by operator</resolution>
+    </error>
+
+    <error code="ERR_TUNNEL_003">
+      <message>Managed block not found in config.yml</message>
+      <context>Required ZUROT-MANAGED-START/END markers missing</context>
+      <resolution>Initialize managed block in config.yml</resolution>
+    </error>
+
+    <error code="ERR_TUNNEL_004">
+      <message>Lock acquisition timeout - possible stale lock</message>
+      <context>Could not acquire lock file within timeout period</context>
+      <resolution>Check for stale .lock file or conflicting process</resolution>
+    </error>
+
+    <error code="ERR_TUNNEL_005">
+      <message>Port conflict - tunnel already exists with different port</message>
+      <context>Attempted to create tunnel with port that conflicts with existing</context>
+      <resolution>Use existing port or delete conflicting tunnel first</resolution>
+    </error>
+
+    <error code="ERR_TUNNEL_006">
+      <message>DNS verification failed - subdomain not resolving</message>
+      <context>DNS routing not propagated or misconfigured</context>
+      <resolution>Check Cloudflare DNS records and tunnel routing</resolution>
+    </error>
+  </error_code_registry>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 7: VERIFICATION PROTOCOL                                    -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <verification_protocol>
+    <dns_verification>
+      <command>dig +short {subdomain}.zurielyahav.com</command>
+      <expected_result>IP addresses returned (Cloudflare proxy IPs)</expected_result>
+      <failure_action>Report ERR_TUNNEL_006 with diagnosis</failure_action>
+    </dns_verification>
+
+    <http_verification>
+      <command>curl -I https://{subdomain}.zurielyahav.com</command>
+      <acceptable_status_codes>
+        <code>200</code>
+        <code>301</code>
+        <code>302</code>
+      </acceptable_status_codes>
+      <unacceptable_codes>
+        <code>403</code>
+        <code>502</code>
+        <code>503</code>
+      </unacceptable_codes>
+      <failure_action>Include diagnosis hypothesis in report</failure_action>
+    </http_verification>
+
+    <process_verification>
+      <command>pgrep -f cloudflared</command>
+      <expected_result>PID returned (process running)</expected_result>
+      <failure_action>Alert that cloudflared process not running</failure_action>
+    </process_verification>
+
+    <config_verification>
+      <command>yq eval . ~/tunnel-management/configs/config.yml</command>
+      <expected_result>Valid YAML structure with no errors</expected_result>
+      <failure_action>Report configuration corruption</failure_action>
+    </config_verification>
+  </verification_protocol>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 8: ENVIRONMENT READINESS CHECKLIST                          -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <environment_readiness_checklist>
+    <description>
+      Execute this "Zurot Ready" check before any tunnel operations.
+      All checks must pass before proceeding.
+    </description>
+
+    <check index="1">
+      <name>Git Branch Verification</name>
+      <command>git rev-parse --abbrev-ref HEAD</command>
+      <validation>Must NOT be 'main' branch</validation>
+      <failure_behavior>Abort - never operate on main branch</failure_behavior>
+    </check>
+
+    <check index="2">
+      <name>Cloudflared Installation</name>
+      <command>cloudflared version</command>
+      <validation>Command executes successfully</validation>
+      <failure_behavior>Install cloudflared via brew</failure_behavior>
+    </check>
+
+    <check index="3">
+      <name>Config File Exists</name>
+      <command>test -f ~/tunnel-management/configs/config.yml</command>
+      <validation>File exists</validation>
+      <failure_behavior>Abort - config missing</failure_behavior>
+    </check>
+
+    <check index="4">
+      <name>Managed Block Present</name>
+      <command>grep "ZUROT-MANAGED-START" ~/tunnel-management/configs/config.yml</command>
+      <validation>Markers found in config</validation>
+      <failure_behavior>Initialize managed block</failure_behavior>
+    </check>
+
+    <check index="5">
+      <name>Lock Available</name>
+      <command>test ! -f ~/tunnel-management/.lock</command>
+      <validation>Lock file does not exist</validation>
+      <failure_behavior>Check for stale lock, wait or abort</failure_behavior>
+    </check>
+
+    <check index="6">
+      <n>Process Running</n>
+      <command>pgrep -f cloudflared</command>
+      <validation>Process is active</validation>
+      <failure_behavior>Alert user to start launchctl service</failure_behavior>
+    </check>
+
+    <check index="7">
+      <n>Network Connectivity</n>
+      <command>ping -c 3 google.com</command>
+      <validation>Packets received successfully</validation>
+      <failure_behavior>Warn about network issues (Costa Rica context)</failure_behavior>
+    </check>
+
+    <check index="8">
+      <n>Ledger File Initialized</n>
+      <command>test -f ~/tunnel-management/run-state.json</command>
+      <validation>Ledger exists</validation>
+      <failure_behavior>Create initial ledger structure</failure_behavior>
+    </check>
+  </environment_readiness_checklist>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 9: IDEMPOTENCY DECISION TREES                               -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <idempotency_rules>
+    <create_tunnel_operation>
+      <decision_tree><![CDATA[
+        Resource exists?
+        ├─ Yes → Properties match current request?
+        │  ├─ Yes → NO-OP (success, already exists)
+        │  └─ No → FAIL (ERR_TUNNEL_005: port conflict)
+        └─ No → CREATE
+           ├─ Add to managed block
+           ├─ Record in run-state.json
+           ├─ Route DNS via cloudflared tunnel route dns
+           └─ Return success
+      ]]></decision_tree>
+    </create_tunnel_operation>
+
+    <delete_tunnel_operation>
+      <decision_tree><![CDATA[
+        Resource exists?
+        ├─ Yes → Owned by caller?
+        │  ├─ Yes → DELETE
+        │  │  ├─ Remove from managed block
+        │  │  ├─ Update run-state.json
+        │  │  └─ Return success
+        │  └─ No → FAIL (ERR_TUNNEL_001: ownership unproven)
+        └─ No → NO-OP (success, already deleted)
+      ]]></decision_tree>
+    </delete_tunnel_operation>
+
+    <edit_tunnel_operation>
+      <decision_tree><![CDATA[
+        Resource exists?
+        ├─ Yes → Class B or Class C?
+        │  ├─ Class B → EDIT allowed (update port/config)
+        │  ├─ Class C → Owned by caller?
+        │  │  ├─ Yes → EDIT allowed
+        │  │  └─ No → FAIL (ERR_TUNNEL_001)
+        │  └─ Class A → FAIL (ERR_TUNNEL_002: production read-only)
+        └─ No → FAIL (tunnel not found)
+      ]]></decision_tree>
+    </edit_tunnel_operation>
+  </idempotency_rules>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 10: FINAL PREREQUISITES CHECKLIST                           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <prerequisites_summary>
+    <required_before_execution>
+      <item>✓ Cloudflare account access (zurielyahav.com zone)</item>
+      <item>✓ Cloudflared installed and configured</item>
+      <item>✓ Existing tunnel (mobile-logs-tunnel) operational</item>
+      <item>✓ Config file with managed block markers</item>
+      <item>✓ LaunchAgent configured for auto-start</item>
+      <item>✓ File structure exists (~/tunnel-management/)</item>
+      <item>✓ Git repository initialized (not on main branch)</item>
+      <item>✓ Network connectivity (Costa Rica aware)</item>
+      <item>✓ Bitwarden CLI authenticated (if secrets needed)</item>
+    </required_before_execution>
+
+    <nice_to_have>
+      <item>○ Existing run-state.json with historical data</item>
+      <item>○ Previous tunnel lifecycle examples</item>
+      <item>○ Monitoring/alerting configured</item>
+    </nice_to_have>
+  </prerequisites_summary>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- FINAL STATEMENT                                                     -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <final_statement>
+    This prerequisites specification defines the COMPLETE infrastructure state
+    required before beginning Tunnel Manager MCP implementation.
+    
+    All account architecture, tunnel classifications, ownership rules, command
+    governance, error codes, and verification protocols are documented here.
+    
+    The execution specification (tunnel_manager_execution.xml) will reference
+    this document for all infrastructure assumptions.
+    
+    Status: READY FOR IMPLEMENTATION
+  </final_statement>
+
+</prerequisites_specification>

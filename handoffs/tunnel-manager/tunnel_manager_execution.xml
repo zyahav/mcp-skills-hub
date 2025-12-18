@@ -1,0 +1,1123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Zurot Standard: Tunnel Manager MCP - Execution Specification
+  Version: 2.0
+  Status: SOURCE OF TRUTH
+  Last Updated: 2025-12-18
+-->
+
+<execution_specification>
+  <metadata>
+    <project_name>Tunnel Manager MCP</project_name>
+    <skill_name>tunnel-manager</skill_name>
+    <version>2.0</version>
+    <owner>Zurot Standard</owner>
+    <prerequisites_reference>tunnel_manager_prerequisites.xml</prerequisites_reference>
+    <implementation_approach>CLI-first, atomic milestones, verification-driven</implementation_approach>
+  </metadata>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 1: OPERATIONAL RULES                                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <operational_rules>
+    <git_workflow>
+      <rule>NEVER work on main branch</rule>
+      <rule>Feature branches only: feature/tunnel-manager</rule>
+      <rule>Git worktree optional (flat monorepo structure)</rule>
+      <rule>Commit after each milestone completion</rule>
+    </git_workflow>
+
+    <execution_model>
+      <principle>Atomic Execution</principle>
+      <description>
+        Stop after every milestone to verify success before proceeding.
+        Each milestone must be proven working before building on top of it.
+      </description>
+      <verification_required>true</verification_required>
+    </execution_model>
+
+    <authority_constraints>
+      <constraint>MCP may NOT control cloudflared lifecycle in dev mode</constraint>
+      <constraint>MCP may ONLY edit within ZUROT-managed block</constraint>
+      <constraint>MCP must acquire lock before config writes</constraint>
+      <constraint>MCP must verify ownership before deletions</constraint>
+    </authority_constraints>
+
+    <failure_protocol>
+      <rule>If ownership unclear → ABORT with ERR_TUNNEL_001</rule>
+      <rule>If production tunnel targeted → ABORT with ERR_TUNNEL_002</rule>
+      <rule>If managed block missing → Initialize or ABORT with ERR_TUNNEL_003</rule>
+      <rule>If lock timeout → ABORT with ERR_TUNNEL_004</rule>
+    </failure_protocol>
+  </operational_rules>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 2: IMPLEMENTATION MILESTONES                                -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <implementation_milestones>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 0: Environment Verification                              -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="0" archon_task_order="100" estimated_hours="0.5">
+      <title>Environment Verification & Health Check</title>
+      <description>
+        Verify all prerequisites from prerequisites.xml are met.
+        Run "Zurot Ready" check before starting implementation.
+      </description>
+
+      <actions>
+        <action index="1">
+          Verify not on main branch
+          <command>git rev-parse --abbrev-ref HEAD</command>
+          <expected>Output should NOT be "main"</expected>
+        </action>
+
+        <action index="2">
+          Check cloudflared installation
+          <command>cloudflared version</command>
+          <expected>Version number displayed</expected>
+        </action>
+
+        <action index="3">
+          Verify config file exists
+          <command>test -f ~/tunnel-management/configs/config.yml && echo "exists"</command>
+          <expected>Output: "exists"</expected>
+        </action>
+
+        <action index="4">
+          Check for cloudflared process
+          <command>pgrep -f cloudflared</command>
+          <expected>PID returned (process running)</expected>
+        </action>
+
+        <action index="5">
+          Verify network connectivity
+          <command>ping -c 3 google.com</command>
+          <expected>3 packets received</expected>
+        </action>
+
+        <action index="6">
+          Check if managed block exists
+          <command>grep "ZUROT-MANAGED" ~/tunnel-management/configs/config.yml | wc -l</command>
+          <expected>2 (START and END markers)</expected>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>echo "All environment checks passed"</cli_command>
+        <success_criteria>All actions return expected results</success_criteria>
+      </verification>
+
+      <deliverable>Confirmed environment ready for implementation</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 1: Initialize Managed Block (if missing)                 -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="1" archon_task_order="90" estimated_hours="1">
+      <title>Initialize Managed Block in Config</title>
+      <description>
+        If ZUROT-MANAGED markers don't exist in config.yml, add them.
+        This creates the boundary between persistent and managed tunnels.
+      </description>
+
+      <prerequisite>Milestone 0 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Backup current config
+          <command>cp ~/tunnel-management/configs/config.yml ~/tunnel-management/configs/config.yml.backup-$(date +%Y%m%d-%H%M%S)</command>
+          <rationale>Safety before modifying production config</rationale>
+        </action>
+
+        <action index="2">
+          Check if markers already exist
+          <command>grep "ZUROT-MANAGED-START" ~/tunnel-management/configs/config.yml</command>
+          <conditional>If found, skip to verification. If not found, proceed.</conditional>
+        </action>
+
+        <action index="3">
+          Add managed block at end of ingress list (before final 404 rule)
+          <command>
+            Use edit_block or manual insertion to add:
+            
+            # --- ZUROT-MANAGED-START ---
+            # Managed exclusively by the Tunnel Manager MCP
+            # Ephemeral tunnels (Class C) declared here
+            # --- ZUROT-MANAGED-END ---
+            
+            Place BEFORE the final catch-all:
+              - service: http_status:404
+          </command>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>grep -A 2 "ZUROT-MANAGED-START" ~/tunnel-management/configs/config.yml</cli_command>
+        <success_criteria>Markers present, properly formatted, positioned before 404 rule</success_criteria>
+      </verification>
+
+      <deliverable>Config file with managed block boundaries</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 2: Initialize Run State Ledger                           -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="2" archon_task_order="80" estimated_hours="1">
+      <title>Create Run State Ledger (run-state.json)</title>
+      <description>
+        Initialize the ownership tracking ledger if it doesn't exist.
+        This file is the authoritative record of tunnel ownership.
+      </description>
+
+      <prerequisite>Milestone 1 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Check if ledger exists
+          <command>test -f ~/tunnel-management/run-state.json && echo "exists"</command>
+        </action>
+
+        <action index="2">
+          If missing, create initial structure
+          <command>
+cat > ~/tunnel-management/run-state.json &lt;&lt;'EOF'
+{
+  "tunnels": {},
+  "metadata": {
+    "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "schema_version": "1.0",
+    "last_updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  }
+}
+EOF
+          </command>
+        </action>
+
+        <action index="3">
+          Set proper permissions
+          <command>chmod 644 ~/tunnel-management/run-state.json</command>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>cat ~/tunnel-management/run-state.json | jq '.metadata.schema_version'</cli_command>
+        <success_criteria>Output: "1.0"</success_criteria>
+      </verification>
+
+      <deliverable>Initialized run-state.json with proper JSON structure</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 3: Scaffold MCP Project Structure                        -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="3" archon_task_order="70" estimated_hours="2">
+      <title>Scaffold MCP Project via mcp-scaffolder</title>
+      <description>
+        Use the mcp-scaffolder tool to generate the standard project structure
+        in both handoffs/ and mcps/ directories. Link to Archon project.
+      </description>
+
+      <prerequisite>Milestones 0-2 complete, Archon project created</prerequisite>
+
+      <actions>
+        <action index="1">
+          Get Archon project ID
+          <command>find_projects(query="Tunnel Manager")</command>
+          <note>Record the project_id (e.g., proj-abc123)</note>
+        </action>
+
+        <action index="2">
+          Run scaffolder
+          <command>
+scaffold_skill(
+  skill_name="tunnel-manager",
+  description="Cloudflare Tunnel management for *.zurielyahav.com",
+  archon_project_id="proj-abc123"
+)
+          </command>
+        </action>
+
+        <action index="3">
+          Verify generated structure
+          <command>ls -R ~/mcp-skills-hub-monorepo/mcp-skills-hub-dev/mcps/tunnel-manager/</command>
+          <expected>src/, package.json, tsconfig.json, skill.json, wrapper.sh</expected>
+        </action>
+
+        <action index="4">
+          Verify handoff structure
+          <command>ls ~/mcp-skills-hub-monorepo/mcp-skills-hub-dev/handoffs/tunnel-manager/</command>
+          <expected>RESUME.md, feature_list.json, progress.txt</expected>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>cat ~/mcp-skills-hub-monorepo/mcp-skills-hub-dev/mcps/tunnel-manager/skill.json</cli_command>
+        <success_criteria>Valid JSON with "tunnel-manager" name</success_criteria>
+      </verification>
+
+      <deliverable>Complete MCP project scaffolded and linked to Archon</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 4: Implement Lock Mechanism                              -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="4" archon_task_order="60" estimated_hours="2">
+      <title>Implement Concurrency Lock System</title>
+      <description>
+        Create lock acquisition and release functions to prevent concurrent
+        writes to config.yml and run-state.json.
+      </description>
+
+      <prerequisite>Milestone 3 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Implement lock acquisition in src/lock.ts
+          <pseudo_code>
+            function acquireLock(timeout = 30000):
+              lockPath = ~/tunnel-management/.lock
+              startTime = now()
+              
+              while (now() - startTime &lt; timeout):
+                if not exists(lockPath):
+                  write(lockPath, {pid: process.pid, timestamp: now()})
+                  return SUCCESS
+                else:
+                  lockData = read(lockPath)
+                  if processStillRunning(lockData.pid):
+                    wait(1000ms)
+                  else:
+                    remove(lockPath)  // stale lock
+              
+              throw ERR_TUNNEL_004
+          </pseudo_code>
+        </action>
+
+        <action index="2">
+          Implement lock release
+          <pseudo_code>
+            function releaseLock():
+              lockPath = ~/tunnel-management/.lock
+              if exists(lockPath):
+                remove(lockPath)
+          </pseudo_code>
+        </action>
+
+        <action index="3">
+          Add cleanup on exit
+          <pseudo_code>
+            process.on('exit', releaseLock)
+            process.on('SIGINT', releaseLock)
+            process.on('SIGTERM', releaseLock)
+          </pseudo_code>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>
+          # Manual test
+          touch ~/tunnel-management/.lock
+          # Try to acquire lock (should timeout or detect stale)
+          node build/test-lock.js
+        </cli_command>
+        <success_criteria>Lock mechanism prevents concurrent access</success_criteria>
+      </verification>
+
+      <deliverable>Working lock acquisition/release system with stale lock detection</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 5: Implement Config Parser (Managed Block)               -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="5" archon_task_order="50" estimated_hours="3">
+      <title>Build Managed-Block YAML Parser</title>
+      <description>
+        Create functions to read/write ONLY within the ZUROT-managed block,
+        preserving all content outside the block byte-for-byte.
+      </description>
+
+      <prerequisite>Milestone 4 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Implement managed block extraction
+          <pseudo_code>
+            function extractManagedBlock(configPath):
+              content = readFile(configPath)
+              startMarker = "# --- ZUROT-MANAGED-START ---"
+              endMarker = "# --- ZUROT-MANAGED-END ---"
+              
+              startIndex = content.indexOf(startMarker)
+              endIndex = content.indexOf(endMarker)
+              
+              if startIndex === -1 or endIndex === -1:
+                throw ERR_TUNNEL_003
+              
+              before = content.substring(0, startIndex + startMarker.length)
+              managed = content.substring(startIndex + startMarker.length, endIndex)
+              after = content.substring(endIndex)
+              
+              return {before, managed, after}
+          </pseudo_code>
+        </action>
+
+        <action index="2">
+          Implement managed block update
+          <pseudo_code>
+            function updateManagedBlock(configPath, newManagedContent):
+              acquireLock()
+              try:
+                {before, managed, after} = extractManagedBlock(configPath)
+                newContent = before + newManagedContent + after
+                writeFile(configPath, newContent)
+              finally:
+                releaseLock()
+          </pseudo_code>
+        </action>
+
+        <action index="3">
+          Parse tunnels from managed block
+          <pseudo_code>
+            function parseManagedTunnels(managedContent):
+              lines = managedContent.split('\n')
+              tunnels = []
+              
+              for line in lines:
+                if line.trim().startsWith('- hostname:'):
+                  hostname = extractHostname(line)
+                  port = extractPort(nextLine)
+                  tunnels.push({hostname, port})
+              
+              return tunnels
+          </pseudo_code>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>
+          # Test by reading current managed block
+          node build/test-parser.js read
+          # Output should show empty or existing tunnels in managed block
+        </cli_command>
+        <success_criteria>Parser extracts content without corrupting config</success_criteria>
+      </verification>
+
+      <deliverable>Working managed-block parser with byte-preservation</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 6: Implement Ownership Verification                      -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="6" archon_task_order="40" estimated_hours="2">
+      <title>Build Ownership Verification Logic</title>
+      <description>
+        Implement functions to verify tunnel ownership using run-state.json,
+        RUN_ID in subdomain, and FEATURE_BRANCH context.
+      </description>
+
+      <prerequisite>Milestone 5 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Get execution context
+          <pseudo_code>
+            function getExecutionContext():
+              return {
+                AGENT_ID: process.env.AGENT_ID || 'manual',
+                FEATURE_BRANCH: execSync('git rev-parse --abbrev-ref HEAD'),
+                RUN_ID: generateRunId()  // YYYYMMDD-HHMM-hash
+              }
+          </pseudo_code>
+        </action>
+
+        <action index="2">
+          Verify ownership for deletion
+          <pseudo_code>
+            function verifyOwnership(subdomain, context):
+              ledger = readLedger()
+              
+              // Method 1: Check ledger
+              if ledger.tunnels[subdomain]:
+                if ledger.tunnels[subdomain].feature_branch === context.FEATURE_BRANCH:
+                  return true
+              
+              // Method 2: Check RUN_ID in subdomain
+              if subdomain.includes(context.RUN_ID):
+                return true
+              
+              // Method 3: Explicit override (user approval)
+              // This would be handled at tool invocation level
+              
+              return false
+          </pseudo_code>
+        </action>
+
+        <action index="3">
+          Classify tunnel by location in config
+          <pseudo_code>
+            function classifyTunnel(subdomain, configPath):
+              {before, managed, after} = extractManagedBlock(configPath)
+              
+              if managed.includes(subdomain):
+                return CLASS_C_EPHEMERAL
+              else if before.includes(subdomain) or after.includes(subdomain):
+                if isProductionTunnel(subdomain):
+                  return CLASS_A_PRODUCTION
+                else:
+                  return CLASS_B_DEV_INFRA
+              
+              return NOT_FOUND
+          </pseudo_code>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>
+          # Test ownership verification
+          node build/test-ownership.js verify "test-tunnel" "feature/test"
+        </cli_command>
+        <success_criteria>Correctly identifies owned vs unowned tunnels</success_criteria>
+      </verification>
+
+      <deliverable>Working ownership verification system</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 7: Implement create_tunnel Tool                         -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="7" archon_task_order="30" estimated_hours="3">
+      <title>Implement create_tunnel MCP Tool</title>
+      <description>
+        Build the primary tool for creating new tunnels with idempotent behavior,
+        DNS routing, and ledger tracking.
+      </description>
+
+      <prerequisite>Milestones 4-6 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Implement create_tunnel tool
+          <pseudo_code>
+            tool create_tunnel(subdomain, port, tunnel_class = 'ephemeral'):
+              context = getExecutionContext()
+              
+              // Validation
+              if subdomain.endsWith('.zurielyahav.com'):
+                throw "Only provide subdomain, not full domain"
+              
+              fullDomain = subdomain + '.zurielyahav.com'
+              
+              // Check if exists
+              existing = findTunnel(fullDomain)
+              if existing:
+                if existing.port === port:
+                  return {status: 'no-op', message: 'Tunnel already exists with same config'}
+                else:
+                  throw ERR_TUNNEL_005  // port conflict
+              
+              // Add to config
+              acquireLock()
+              try:
+                if tunnel_class === 'ephemeral':
+                  addToManagedBlock(fullDomain, port)
+                else:
+                  // Class B - add outside managed block with approval
+                  requireUserApproval()
+                  addToConfig(fullDomain, port)
+                
+                // Route DNS
+                exec(`cloudflared tunnel route dns mobile-logs-tunnel ${fullDomain}`)
+                
+                // Update ledger
+                updateLedger(subdomain, {
+                  subdomain: fullDomain,
+                  port: port,
+                  class: tunnel_class,
+                  created_by: context.AGENT_ID,
+                  feature_branch: context.FEATURE_BRANCH,
+                  run_id: context.RUN_ID,
+                  created_at: now(),
+                  status: 'active'
+                })
+              finally:
+                releaseLock()
+              
+              // Inform user to restart cloudflared
+              return {
+                status: 'created',
+                message: 'Tunnel created. Restart cloudflared: launchctl restart com.cloudflare.cloudflared',
+                url: `https://${fullDomain}`
+              }
+          </pseudo_code>
+        </action>
+
+        <action index="2">
+          Add DNS routing helper
+          <pseudo_code>
+            function routeDNS(fullDomain):
+              result = exec(`cloudflared tunnel route dns mobile-logs-tunnel ${fullDomain}`)
+              
+              if result.stderr.includes('already exists'):
+                return 'already-routed'
+              
+              if result.success:
+                return 'routed'
+              
+              throw 'DNS routing failed: ' + result.stderr
+          </pseudo_code>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>
+          # Test creating a tunnel
+          # This will be done via MCP tool invocation once deployed
+          echo "Manual test after deployment"
+        </cli_command>
+        <success_criteria>Tool creates tunnel, routes DNS, updates ledger</success_criteria>
+      </verification>
+
+      <deliverable>Working create_tunnel tool with full idempotency</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 8: Implement delete_tunnel Tool                          -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="8" archon_task_order="20" estimated_hours="2">
+      <title>Implement delete_tunnel MCP Tool</title>
+      <description>
+        Build tool for safely deleting tunnels with ownership verification
+        and lifecycle rules.
+      </description>
+
+      <prerequisite>Milestone 7 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Implement delete_tunnel tool
+          <pseudo_code>
+            tool delete_tunnel(subdomain, force = false):
+              context = getExecutionContext()
+              fullDomain = subdomain + '.zurielyahav.com'
+              
+              // Check if exists
+              existing = findTunnel(fullDomain)
+              if not existing:
+                return {status: 'no-op', message: 'Tunnel not found (already deleted)'}
+              
+              // Classify tunnel
+              tunnelClass = classifyTunnel(fullDomain)
+              
+              if tunnelClass === CLASS_A_PRODUCTION:
+                throw ERR_TUNNEL_002  // Cannot delete production
+              
+              // Verify ownership (for Class C)
+              if tunnelClass === CLASS_C_EPHEMERAL:
+                if not verifyOwnership(subdomain, context) and not force:
+                  throw ERR_TUNNEL_001  // Ownership unproven
+              
+              // Class B requires user approval
+              if tunnelClass === CLASS_B_DEV_INFRA and not force:
+                requireUserApproval(`Delete persistent dev tunnel ${fullDomain}?`)
+              
+              // Delete from config
+              acquireLock()
+              try:
+                if tunnelClass === CLASS_C_EPHEMERAL:
+                  removeFromManagedBlock(fullDomain)
+                else:
+                  removeFromConfig(fullDomain)
+                
+                // Update ledger
+                updateLedger(subdomain, {status: 'deleted', deleted_at: now()})
+                
+                // Note: DNS record cleanup is manual or handled by Cloudflare
+                // We don't remove DNS automatically as it may be cached
+              finally:
+                releaseLock()
+              
+              return {
+                status: 'deleted',
+                message: 'Tunnel deleted. Restart cloudflared to apply changes.'
+              }
+          </pseudo_code>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>
+          # Test after deployment
+          echo "Verify deletion removes from config and updates ledger"
+        </cli_command>
+        <success_criteria>Tool deletes safely with ownership checks</success_criteria>
+      </verification>
+
+      <deliverable>Working delete_tunnel tool with safety checks</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 9: Implement list_tunnels Tool                           -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="9" archon_task_order="10" estimated_hours="2">
+      <title>Implement list_tunnels MCP Tool</title>
+      <description>
+        Build tool to query active tunnels with classification, ownership,
+        and status information.
+      </description>
+
+      <prerequisite>Milestone 8 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Implement list_tunnels tool
+          <pseudo_code>
+            tool list_tunnels(filter = 'all'):
+              context = getExecutionContext()
+              
+              // Get all tunnels from config
+              allTunnels = parseConfigTunnels()
+              
+              // Get managed tunnels
+              managedTunnels = parseManagedBlock()
+              
+              // Get ledger data
+              ledger = readLedger()
+              
+              results = []
+              
+              for tunnel in allTunnels:
+                classification = classifyTunnel(tunnel.hostname)
+                ledgerData = ledger.tunnels[tunnel.hostname] || {}
+                
+                owned = false
+                if classification === CLASS_C_EPHEMERAL:
+                  owned = verifyOwnership(tunnel.hostname, context)
+                
+                results.push({
+                  hostname: tunnel.hostname,
+                  port: tunnel.port,
+                  class: classification,
+                  owned_by_current_branch: owned,
+                  created_by: ledgerData.created_by,
+                  created_at: ledgerData.created_at,
+                  status: ledgerData.status || 'unknown'
+                })
+              
+              // Filter based on parameter
+              if filter === 'owned':
+                results = results.filter(t => t.owned_by_current_branch)
+              else if filter === 'ephemeral':
+                results = results.filter(t => t.class === CLASS_C_EPHEMERAL)
+              else if filter === 'persistent':
+                results = results.filter(t => t.class !== CLASS_C_EPHEMERAL)
+              
+              return {
+                count: results.length,
+                tunnels: results,
+                current_branch: context.FEATURE_BRANCH
+              }
+          </pseudo_code>
+        </action>
+
+        <action index="2">
+          Add DNS verification option
+          <pseudo_code>
+            tool list_tunnels(filter = 'all', verify_dns = false):
+              results = /* ... as above ... */
+              
+              if verify_dns:
+                for tunnel in results:
+                  dnsResult = exec(`dig +short ${tunnel.hostname}`)
+                  tunnel.dns_resolves = dnsResult.stdout.length > 0
+              
+              return results
+          </pseudo_code>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>
+          # Test after deployment
+          echo "Verify list shows correct classification and ownership"
+        </cli_command>
+        <success_criteria>Tool lists all tunnels with accurate metadata</success_criteria>
+      </verification>
+
+      <deliverable>Working list_tunnels tool with filtering</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 10: Implement Verification Protocol                      -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="10" archon_task_order="5" estimated_hours="2">
+      <title>Add Tunnel Verification Functions</title>
+      <description>
+        Implement DNS and HTTP verification to confirm tunnels are working.
+      </description>
+
+      <prerequisite>Milestone 9 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Implement DNS verification
+          <pseudo_code>
+            function verifyDNS(fullDomain):
+              result = exec(`dig +short ${fullDomain}`)
+              
+              if result.stdout.length === 0:
+                return {
+                  success: false,
+                  error: 'DNS not resolving',
+                  code: 'ERR_TUNNEL_006'
+                }
+              
+              return {
+                success: true,
+                ips: result.stdout.split('\n').filter(Boolean)
+              }
+          </pseudo_code>
+        </action>
+
+        <action index="2">
+          Implement HTTP verification
+          <pseudo_code>
+            function verifyHTTP(fullDomain):
+              result = exec(`curl -I https://${fullDomain}`)
+              
+              statusCode = extractStatusCode(result.stdout)
+              
+              acceptableCodes = [200, 301, 302]
+              
+              if acceptableCodes.includes(statusCode):
+                return {success: true, status: statusCode}
+              
+              return {
+                success: false,
+                status: statusCode,
+                diagnosis: getDiagnosis(statusCode)
+              }
+          </pseudo_code>
+        </action>
+
+        <action index="3">
+          Add to create_tunnel tool
+          <note>
+            After creating tunnel, automatically run verification
+            and include results in response
+          </note>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>
+          # Test verification on existing tunnel
+          curl -I https://vibetunnel.zurielyahav.com
+          dig +short vibetunnel.zurielyahav.com
+        </cli_command>
+        <success_criteria>Verification accurately reports tunnel status</success_criteria>
+      </verification>
+
+      <deliverable>Working verification system integrated into tools</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 11: Testing & Integration                                -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="11" archon_task_order="3" estimated_hours="3">
+      <title>End-to-End Testing</title>
+      <description>
+        Test complete workflow: create → verify → list → delete
+      </description>
+
+      <prerequisite>Milestones 7-10 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Test create_tunnel (ephemeral)
+          <test_case>
+            create_tunnel('test-feature-20251218', 9000, 'ephemeral')
+            Expected: Tunnel added to managed block, DNS routed, ledger updated
+          </test_case>
+        </action>
+
+        <action index="2">
+          Test idempotency
+          <test_case>
+            create_tunnel('test-feature-20251218', 9000, 'ephemeral')
+            Expected: NO-OP response (already exists)
+          </test_case>
+        </action>
+
+        <action index="3">
+          Test list_tunnels
+          <test_case>
+            list_tunnels('owned')
+            Expected: Shows test-feature tunnel owned by current branch
+          </test_case>
+        </action>
+
+        <action index="4">
+          Restart cloudflared and verify
+          <command>launchctl restart com.cloudflare.cloudflared</command>
+          <command>sleep 5</command>
+          <command>curl -I https://test-feature-20251218.zurielyahav.com</command>
+          <expected>200 or 502 (if port not listening)</expected>
+        </action>
+
+        <action index="5">
+          Test delete_tunnel
+          <test_case>
+            delete_tunnel('test-feature-20251218')
+            Expected: Removed from managed block, ledger updated
+          </test_case>
+        </action>
+
+        <action index="6">
+          Test ownership protection
+          <test_case>
+            Switch to different branch
+            Try to delete_tunnel('test-feature-20251218')
+            Expected: ERR_TUNNEL_001 (ownership unproven)
+          </test_case>
+        </action>
+
+        <action index="7">
+          Test production protection
+          <test_case>
+            delete_tunnel('speakit')
+            Expected: ERR_TUNNEL_002 (Class A read-only)
+          </test_case>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>
+          # Verify managed block unchanged except for test additions/removals
+          cat ~/tunnel-management/configs/config.yml | grep -A 20 "ZUROT-MANAGED"
+        </cli_command>
+        <success_criteria>All tests pass, config integrity maintained</success_criteria>
+      </verification>
+
+      <deliverable>Fully tested MCP with all safety checks verified</deliverable>
+    </milestone>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <!-- MILESTONE 12: Documentation & Deployment                           -->
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    
+    <milestone index="12" archon_task_order="1" estimated_hours="2">
+      <title>Documentation & Claude Desktop Integration</title>
+      <description>
+        Complete README, update feature_list.json, and add to Claude config.
+      </description>
+
+      <prerequisite>Milestone 11 complete</prerequisite>
+
+      <actions>
+        <action index="1">
+          Update README.md
+          <content>
+            # Tunnel Manager MCP
+            
+            Cloudflare Tunnel management for *.zurielyahav.com
+            
+            ## Tools
+            - create_tunnel(subdomain, port, tunnel_class)
+            - delete_tunnel(subdomain, force)
+            - list_tunnels(filter, verify_dns)
+            
+            ## Tunnel Classes
+            - Class A: Production (read-only)
+            - Class B: Persistent Dev (editable)
+            - Class C: Ephemeral (managed)
+            
+            ## Usage Examples
+            [Include examples]
+          </content>
+        </action>
+
+        <action index="2">
+          Update feature_list.json
+          <command>
+            Mark all features as 'passing':
+            - Managed block parser
+            - Lock mechanism
+            - Ownership verification
+            - create_tunnel tool
+            - delete_tunnel tool
+            - list_tunnels tool
+            - DNS/HTTP verification
+          </command>
+        </action>
+
+        <action index="3">
+          Add to Claude Desktop config
+          <config_location>~/Library/Application Support/Claude/claude_desktop_config.json</config_location>
+          <config_entry>
+{
+  "mcpServers": {
+    "tunnel-manager": {
+      "command": "node",
+      "args": [
+        "/Users/zyahav/mcp-skills-hub-monorepo/mcp-skills-hub-dev/mcps/tunnel-manager/build/index.js"
+      ],
+      "env": {
+        "TUNNEL_CONFIG_PATH": "/Users/zyahav/tunnel-management/configs/config.yml",
+        "TUNNEL_LEDGER_PATH": "/Users/zyahav/tunnel-management/run-state.json"
+      }
+    }
+  }
+}
+          </config_entry>
+        </action>
+
+        <action index="4">
+          Test MCP in Claude Desktop
+          <test>Ask Claude to list_tunnels()</test>
+          <expected>Response with current tunnels</expected>
+        </action>
+      </actions>
+
+      <verification>
+        <cli_command>
+          # Verify MCP shows in Claude Desktop
+          cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | jq '.mcpServers."tunnel-manager"'
+        </cli_command>
+        <success_criteria>MCP registered and functional in Claude</success_criteria>
+      </verification>
+
+      <deliverable>Production-ready MCP integrated into Claude Desktop</deliverable>
+    </milestone>
+
+  </implementation_milestones>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 3: DECOMMISSION PROTOCOL                                    -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <decommission_protocol>
+    <trigger_conditions>
+      <condition>Feature branch merged to main</condition>
+      <condition>Feature branch aborted/deleted</condition>
+      <condition>Explicit user request for cleanup</condition>
+    </trigger_conditions>
+
+    <cleanup_steps>
+      <step index="1">
+        Query ephemeral tunnels for current branch
+        <command>list_tunnels(filter='owned')</command>
+      </step>
+
+      <step index="2">
+        Delete each owned tunnel
+        <command>delete_tunnel(subdomain) for each owned tunnel</command>
+      </step>
+
+      <step index="3">
+        Verify managed block cleaned up
+        <command>grep -A 20 "ZUROT-MANAGED" ~/tunnel-management/configs/config.yml</command>
+      </step>
+
+      <step index="4">
+        Archive ledger entries
+        <note>Move deleted tunnel entries to archived section in run-state.json</note>
+      </step>
+
+      <step index="5">
+        Restart cloudflared
+        <command>launchctl restart com.cloudflare.cloudflared</command>
+      </step>
+    </cleanup_steps>
+
+    <persistent_tunnels>
+      <rule>Class A and Class B tunnels are NEVER auto-deleted</rule>
+      <rule>Manual deletion of Class B requires explicit user approval</rule>
+    </persistent_tunnels>
+  </decommission_protocol>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SECTION 4: MANDATORY END-OF-RUN REPORT                             -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <end_of_run_report>
+    <required_fields>
+      <field>Execution Context (RUN_ID, FEATURE_BRANCH, AGENT_ID)</field>
+      <field>Config files touched (paths only, not contents)</field>
+      <field>Tunnels created during run</field>
+      <field>Tunnels deleted during run</field>
+      <field>Tunnels currently active and owned by branch</field>
+      <field>Verification results (DNS/HTTP status)</field>
+      <field>Cleanup eligibility (which tunnels qualify for deletion)</field>
+      <field>Any errors encountered</field>
+    </required_fields>
+
+    <report_format>
+      <example><![CDATA[
+=== Tunnel Manager MCP - Run Report ===
+Run ID: 20251218-1430-a3b2c1
+Feature Branch: feature/authentication
+Agent ID: claude-agent-001
+
+Actions Performed:
+- Created: test-auth-20251218.zurielyahav.com:3001 (ephemeral)
+- Deleted: (none)
+
+Active Tunnels (Owned by Branch):
+- test-auth-20251218.zurielyahav.com:3001 [Class C]
+  DNS: ✓ Resolving
+  HTTP: ✓ 200 OK
+
+Cleanup Eligibility:
+- On branch merge: 1 tunnel will be auto-deleted
+- Persistent tunnels: 9 (unchanged)
+
+Errors: None
+
+Status: Success ✓
+==========================================
+      ]]></example>
+    </report_format>
+  </end_of_run_report>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- FINAL STATEMENT                                                     -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  
+  <final_statement>
+    This execution specification defines the COMPLETE implementation path
+    for the Tunnel Manager MCP from environment verification through
+    production deployment.
+    
+    All milestones are sequential, atomic, and verifiable. Each milestone
+    produces a concrete deliverable that can be tested before proceeding.
+    
+    The implementation follows the Zurot Standard's CLI-first approach,
+    maintains strict safety boundaries, and integrates with the Archon
+    task management system.
+    
+    Status: READY FOR IMPLEMENTATION
+    
+    Next Steps:
+    1. Create Archon project
+    2. Convert milestones to Archon tasks
+    3. Run mcp-scaffolder with project ID
+    4. Begin implementation at Milestone 0
+  </final_statement>
+
+</execution_specification>
