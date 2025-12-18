@@ -1,0 +1,100 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Config Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2rem; max-width: 1200px; margin: 0 auto; background: #f5f5f7; }
+        h1 { color: #1d1d1f; }
+        .card { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .tabs { display: flex; gap: 1rem; margin-bottom: 1rem; border-bottom: 1px solid #e5e5e5; }
+        .tab { padding: 0.5rem 1rem; cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500; color: #6e6e73; }
+        .tab.active { border-bottom-color: #0071e3; color: #0071e3; }
+        pre { background: #1e1e1e; color: #e1e1e1; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 13px; margin: 0; }
+        button { background: #0071e3; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 14px; margin-top: 1rem; }
+        button:hover { background: #0077ed; }
+        .mcp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; }
+        .mcp-item { background: #f9f9f9; padding: 1rem; border-radius: 8px; border: 1px solid #e5e5e5; }
+        .mcp-name { font-weight: 600; margin-bottom: 0.5rem; color: #1d1d1f; }
+        .mcp-type { font-size: 12px; color: #86868b; text-transform: uppercase; letter-spacing: 0.5px; }
+        .status {font-size: 12px; padding: 2px 6px; border-radius: 4px; background: #e5ffe5; color: #008000; display: inline-block;}
+    </style>
+</head>
+<body>
+    <h1>MCP Configuration Dashboard</h1>
+    
+    <div class="card">
+        <h3>Detected MCPs</h3>
+        <div id="mcpList" class="mcp-list">Loading...</div>
+    </div>
+
+    <div class="card">
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('claude')">Claude Desktop</div>
+            <div class="tab" onclick="showTab('gemini')">Gemini / VSCode</div>
+        </div>
+        
+        <div id="claudeContent">
+            <p>Add this to <code>~/Library/Application Support/Claude/claude_desktop_config.json</code></p>
+            <pre id="claudeConfig">Loading...</pre>
+            <button onclick="copyToClipboard('claudeConfig')">Copy Config</button>
+        </div>
+
+        <div id="geminiContent" style="display: none;">
+            <p>Add this to your <code>settings.json</code> (VSCode) or Gemini config.</p>
+            <pre id="geminiConfig">Loading...</pre>
+            <button onclick="copyToClipboard('geminiConfig')">Copy Config</button>
+        </div>
+    </div>
+
+    <script>
+        let data = null;
+
+        async function fetchConfig() {
+            try {
+                const res = await fetch('/api/config');
+                data = await res.json();
+                render();
+            } catch (e) {
+                document.getElementById('mcpList').textContent = "Error loading config: " + e.message;
+            }
+        }
+
+        function render() {
+            // List
+            const listEl = document.getElementById('mcpList');
+            listEl.innerHTML = data.mcps.map(m => `
+                <div class="mcp-item">
+                    <div class="mcp-name">${m.name}</div>
+                    <div class="mcp-type">${m.type}</div>
+                    <div style="margin-top:0.5rem; font-size:12px; color:#555;">
+                        ${m.command} ${m.args[0].split('/').pop()}
+                    </div>
+                </div>
+            `).join('');
+
+            // Configs
+            document.getElementById('claudeConfig').textContent = data.claude;
+            document.getElementById('geminiConfig').textContent = data.gemini;
+        }
+
+        function showTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            document.getElementById('claudeContent').style.display = name === 'claude' ? 'block' : 'none';
+            document.getElementById('geminiContent').style.display = name === 'gemini' ? 'block' : 'none';
+        }
+
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(text);
+            alert('Copied to clipboard!');
+        }
+
+        fetchConfig();
+    </script>
+</body>
+</html>
