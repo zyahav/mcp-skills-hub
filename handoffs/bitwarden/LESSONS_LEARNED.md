@@ -33,6 +33,8 @@ bitwarden_client.ts (sacred core - ALL rules enforced here)
 1. **CLI output is raw** - `process.stdout.write(secret)` with no newline, for shell capture
 2. **Forbidden commands blocked** - unlock, login, logout, lock
 3. **Error messages redacted** - BW_SESSION token stripped from errors
+4. **Modern bw CLI (2024+)** - Returns JSON by default, no `--format json` flag needed
+5. **bw sync required** - After creating/editing items in Bitwarden, run `bw sync` before CLI access
 
 ## Files Created
 

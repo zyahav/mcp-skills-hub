@@ -26,7 +26,7 @@ fi
 echo "✓ BW_SESSION is set"
 
 # Check vault status
-STATUS=$(bw status --format json | jq -r '.status')
+STATUS=$(bw status | jq -r '.status')
 if [ "$STATUS" != "unlocked" ]; then
     echo "❌ Vault is not unlocked (status: $STATUS)"
     exit 1

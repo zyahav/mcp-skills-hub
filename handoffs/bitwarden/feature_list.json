@@ -3,40 +3,31 @@
     "milestone": 1,
     "category": "scaffolding",
     "description": "Project Scaffolding",
-    "deliverables": [
-      "mcps/bitwarden/package.json",
-      "mcps/bitwarden/src/index.ts"
-    ],
     "passes": true,
-    "verified_at": "2025-12-18",
-    "commit": "Initial Commit"
+    "verified_at": "2025-12-18"
   },
   {
     "milestone": 2,
     "category": "client",
     "description": "Bitwarden Client Implementation",
-    "deliverables": [
-      "mcps/bitwarden/src/bitwarden_client.ts",
-      "mcps/bitwarden/src/cli.ts",
-      "mcps/bitwarden/src/__tests__/bitwarden_client.test.ts",
-      "mcps/bitwarden/vitest.config.ts"
-    ],
     "passes": true,
     "verified_at": "2025-12-18",
-    "verification": "npm test → 13 tests passed",
-    "commit": "feat(bitwarden): implement client with R1-R8 safety rules and CLI"
+    "verification": "npm test → 13 tests passed"
   },
   {
     "milestone": 3,
     "category": "mcp-server",
     "description": "MCP Server Implementation",
-    "deliverables": [
-      "mcps/bitwarden/src/index.ts (updated with real tools)",
-      "mcps/bitwarden/skill.json (updated)"
-    ],
     "passes": true,
     "verified_at": "2025-12-18",
-    "verification": "npm run build → success, npm test → 13 pass",
-    "commit": "feat(bitwarden): implement MCP server with get_secret and get_notes tools"
+    "verification": "npm run build → success"
+  },
+  {
+    "milestone": 4,
+    "category": "integration",
+    "description": "Integration & Verification",
+    "passes": true,
+    "verified_at": "2025-12-18",
+    "verification": "./test-live.sh → All tests passed"
   }
 ]

@@ -202,7 +202,8 @@ export class BitwardenClient {
     }
 
     try {
-      const { stdout } = await execFileAsync("bw", [...args, "--format", "json"], {
+      // Note: Modern bw CLI (2024+) returns JSON by default, no --format flag needed
+      const { stdout } = await execFileAsync("bw", args, {
         env: {
           ...process.env,
           BW_SESSION: process.env.BW_SESSION,
