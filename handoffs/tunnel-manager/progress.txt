@@ -7,4 +7,5 @@
 - [EXEC] Milestone 0: Verified environment (cloudflared present, connectivity good).
 - [NOTE] Milestone 0: "ZuRot Managed" markers missing (as expected).
 - [EXEC] Milestone 1: Initialized Managed Block in `config.yml` (added markers).
-- [TODO] Ready for Milestone 2: Create Run State Ledger.
+- [EXEC] Milestone 2: Created Run State Ledger at `~/tunnel-management/run-state.json`.
+- [TODO] Ready for Milestone 4: Concurrency Lock System.
