@@ -296,3 +296,15 @@ If the Task Manager (Archon) is unreachable, the Agent is paralyzed.
 **Context:** When using simple string manipulation or regex to append to YAML, beware of flow-style artifacts like empty arrays `[]` left behind by parsers or previous edits.
 **Issue:** Cloudflare's YAML parser is strict. An errant `[]` line caused the service to fail to restart (`could not find expected ':'`).
 **Fix:** Always sanitize input strings (trim, remove artifacts) before appending to the managed block.
+
+#### 20. The "Trapdoor Effect" (ENOENT: uv_cwd)
+**Symptom:** Terminal commands fail with `ENOENT: no such file or directory, uv_cwd` immediately after merging.
+**Cause:** The automation deleted the feature branch worktree (`delete_feature_branch`) while the user's terminal session was still `cd`'d into that directory.
+**Fix:** Always `cd` to a persistent directory (`dev` or root) before deleting a worktree.
+**Prevention:** The `delete_feature` script should warn if the current PWD is inside the target worktree (though hard to enforce on the user's shell).
+
+#### 21. The "Zombie DNS" (Missing CNAME)
+**Symptom:** Local service runs, config has the tunnel, but public URL fails with DNS error.
+**Cause:** The `create_tunnel` tool failed midway (due to YAML parsing error). It updated the local file but crashed before executing `cloudflared tunnel route dns`.
+**Fix:** Manually run `cloudflared tunnel route dns <id> <hostname>`.
+**Prevention:** `create_tunnel` should be atomic or have a "repair/retry" mode that checks for missing CNAMEs for existing config entries.
