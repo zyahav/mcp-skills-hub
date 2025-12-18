@@ -19,7 +19,7 @@
   <milestones>
     <milestone index="1">
       <title>Project Scaffolding</title>
-      <status>⬜ NOT STARTED</status>
+      <status>✅ COMPLETE (2025-12-18)</status>
       <actions>
         <action>1. Create directory: `mkdir -p mcps/cloudflare-dns/src`</action>
         <action>2. Create `package.json` with @modelcontextprotocol/sdk and axios</action>

@@ -1,0 +1,59 @@
+{
+  "name": "cloudflare-dns",
+  "version": "1.0.0",
+  "description": "Manage Cloudflare DNS records with apex protection for zurielyahav.com",
+  "author": "Zuriel Yahav",
+  "tools": [
+    {
+      "name": "upsert_dns_record",
+      "description": "Create or update a DNS record. Protected subdomains (@, www, zurielyahav.com) are blocked.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "subdomain": {
+            "type": "string",
+            "description": "Subdomain name (e.g., 'api', 'blog'). Cannot be '@', 'www', or 'zurielyahav.com'."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["A", "CNAME", "TXT"],
+            "description": "DNS record type. Only A, CNAME, and TXT are allowed."
+          },
+          "content": {
+            "type": "string",
+            "description": "Record content (IP address for A, hostname for CNAME, text for TXT)"
+          },
+          "proxied": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to proxy through Cloudflare (ignored for TXT records)"
+          }
+        },
+        "required": ["subdomain", "type", "content"]
+      }
+    },
+    {
+      "name": "delete_dns_record",
+      "description": "Delete a DNS record. Protected subdomains (@, www, zurielyahav.com) are blocked.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "subdomain": {
+            "type": "string",
+            "description": "Subdomain name to delete. Cannot be '@', 'www', or 'zurielyahav.com'."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["A", "CNAME", "TXT"],
+            "description": "Optional: Specify record type to delete if multiple records exist"
+          }
+        },
+        "required": ["subdomain"]
+      }
+    }
+  ],
+  "safety": {
+    "protected_subdomains": ["@", "www", "zurielyahav.com"],
+    "allowed_record_types": ["A", "CNAME", "TXT"]
+  }
+}
