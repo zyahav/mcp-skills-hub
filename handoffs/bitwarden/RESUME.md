@@ -1,6 +1,6 @@
 # 🚀 Resume Instructions: bitwarden
 
-**Status:** 🟡 IN PROGRESS (Milestone 2 in review)
+**Status:** 🟡 IN PROGRESS (Milestone 3 in review)
 **Archon Project ID:** `1f1b0204-a804-4266-a451-4d37d0cd25e0`
 
 ## Context (Why This Exists)
@@ -35,8 +35,8 @@ See `LESSONS_LEARNED.md` for why alternatives were rejected.
 | Milestone | Status | Verification |
 |-----------|--------|--------------|
 | 1. Scaffolding | ✅ done | `ls mcps/bitwarden` |
-| 2. Client Implementation | 🟡 review | `npm test` → 13 pass |
-| 3. MCP Server | ⬜ todo | `npm run build` |
+| 2. Client Implementation | ✅ done | `npm test` → 13 pass |
+| 3. MCP Server | 🟡 review | `npm run build` → pass |
 | 4. Integration | ⬜ todo | Live test with mcp-cli |
 
 ## Quick Start
@@ -57,13 +57,12 @@ Full spec is in Archon:
 find_documents(project_id="1f1b0204-a804-4266-a451-4d37d0cd25e0")
 ```
 
-## Next Task (Milestone 3)
+## Next Task (Milestone 4)
 
-Update `src/index.ts` to expose real MCP tools:
-- `bitwarden_get_secret(item, field)` 
-- `bitwarden_get_notes(item)`
-
-Both use `BitwardenClient` from `bitwarden_client.ts`.
+Live integration test:
+- Configure agent to use the Bitwarden MCP
+- Test with `mcp-cli` or real invocation
+- Verify: `bitwarden_get_secret` returns correct value
 
 ## Key Files
 
@@ -71,8 +70,9 @@ Both use `BitwardenClient` from `bitwarden_client.ts`.
 |------|---------|
 | `src/bitwarden_client.ts` | Sacred core - all bw access here |
 | `src/cli.ts` | CLI for wrapper.sh scripts |
-| `src/index.ts` | MCP server (needs update in M3) |
+| `src/index.ts` | MCP server (DONE - exposes tools) |
 | `src/__tests__/bitwarden_client.test.ts` | 13 unit tests |
+| `skill.json` | Tool definitions for agents |
 
 ## After This MCP is Done
 

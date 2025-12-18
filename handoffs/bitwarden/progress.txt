@@ -3,15 +3,16 @@ Bitwarden MCP Progress
 Last Updated: 2025-12-18
 
 Milestone 1: Scaffolding ............ DONE
-Milestone 2: Client Implementation .. IN REVIEW (13/13 tests pass)
-Milestone 3: MCP Server ............. TODO
+Milestone 2: Client Implementation .. DONE (13/13 tests pass)
+Milestone 3: MCP Server ............. IN REVIEW (build passes)
 Milestone 4: Integration ............ TODO
 
 Key Files:
 - src/bitwarden_client.ts (sacred core)
 - src/cli.ts (CLI interface)
-- src/index.ts (MCP server - needs update in M3)
+- src/index.ts (MCP server - UPDATED)
+- skill.json (UPDATED with real tools)
 
-Architecture Decision: SETTLED
-- One core, two interfaces (CLI + MCP)
-- See LESSONS_LEARNED.md
+MCP Tools Exposed:
+- bitwarden_get_secret(item, field)
+- bitwarden_get_notes(item)
