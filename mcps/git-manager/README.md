@@ -95,6 +95,19 @@ Creates an annotated version tag on main and pushes it.
   - `message` (string, optional): Tag message (defaults to "Release {version}")
   - `push` (boolean, default=true): Push tag to origin
 
+### `create_repo`
+Creates a new GitHub repository from a local directory. Initializes git if needed, creates the GitHub repo, and pushes.
+- **Arguments:**
+  - `path` (string, required): Local path to the directory
+  - `name` (string, required): Repository name on GitHub (e.g., `my-project`)
+  - `public` (boolean, default=true): Make repository public
+  - `description` (string, optional): Repository description
+
+**Example:**
+```
+create_repo(path="/path/to/my-project", name="my-project", public=true, description="My awesome project")
+```
+
 ### `get_help`
 Get usage help for a specific tool or list all tools.
 - **Arguments:**

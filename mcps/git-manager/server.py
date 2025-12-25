@@ -208,6 +208,31 @@ class CommitPushArgs(BaseModel):
     push: bool = Field(default=True, description="Push to origin after commit")
 
 
+class CreateRepoArgs(BaseModel):
+    """Arguments for creating a new GitHub repository."""
+    path: str = Field(description="Local path to the directory to initialize as a git repo")
+    name: str = Field(description="Repository name on GitHub (e.g., 'my-project')")
+    public: bool = Field(default=True, description="Make repository public (default: True)")
+    description: Optional[str] = Field(default=None, description="Repository description")
+    
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("path cannot be empty")
+        return v.strip()
+    
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("name cannot be empty")
+        v = v.strip()
+        if any(c in v for c in " \t\n/\\"):
+            raise ValueError("name cannot contain spaces or path separators")
+        return v
+
+
 # ============== TOOL DEFINITIONS ==============
 
 TOOLS = {
@@ -250,6 +275,10 @@ TOOLS = {
     "git_add_commit_push": {
         "description": "Stage all changes (git add .), commit, and optionally push.",
         "schema": CommitPushArgs,
+    },
+    "create_repo": {
+        "description": "Create a new GitHub repository from a local directory. Initializes git, creates GitHub repo, and pushes.",
+        "schema": CreateRepoArgs,
     },
     "get_help": {
         "description": "Get usage help for a specific tool or list all tools.",
@@ -301,6 +330,9 @@ async def call_tool(name: str, arguments: dict):
         elif name == "git_add_commit_push":
             args = CommitPushArgs(**arguments)
             result = do_git_add_commit_push(args.message, args.worktree, args.push)
+        elif name == "create_repo":
+            args = CreateRepoArgs(**arguments)
+            result = do_create_repo(args.path, args.name, args.public, args.description)
         elif name == "get_help":
             args = HelpArgs(**arguments)
             result = do_get_help(args.tool_name)
@@ -704,6 +736,150 @@ def do_git_add_commit_push(message: Optional[str], worktree: Optional[str], push
         else:
              output.append("\n✅ Pushed successfully")
 
+    return "\n".join(output)
+
+
+def do_create_repo(path: str, name: str, public: bool = True, description: Optional[str] = None) -> str:
+    """Create a new GitHub repository from a local directory."""
+    output = [f"=== CREATING REPOSITORY: {name} ===\n"]
+    
+    repo_path = Path(path).resolve()
+    
+    # Validate path exists
+    if not repo_path.exists():
+        return f"❌ Path does not exist: {repo_path}"
+    
+    if not repo_path.is_dir():
+        return f"❌ Path is not a directory: {repo_path}"
+    
+    # Check if gh CLI is available
+    gh_check = subprocess.run(["which", "gh"], capture_output=True, text=True)
+    if gh_check.returncode != 0:
+        return "❌ GitHub CLI (gh) not found. Install from https://cli.github.com/"
+    
+    # Check if gh is authenticated
+    auth_check = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
+    if auth_check.returncode != 0:
+        return "❌ GitHub CLI not authenticated. Run: gh auth login"
+    
+    # Check if already a git repo
+    git_dir = repo_path / ".git"
+    if not git_dir.exists():
+        output.append("Initializing git repository...")
+        init_res = subprocess.run(
+            ["git", "init"],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True
+        )
+        if init_res.returncode != 0:
+            return f"❌ Failed to init git repo: {init_res.stderr}"
+        output.append("✅ Git initialized")
+    else:
+        output.append("ℹ️  Already a git repository")
+    
+    # Check if there are commits
+    log_check = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(repo_path),
+        capture_output=True,
+        text=True
+    )
+    if log_check.returncode != 0:
+        # No commits yet - check if there are files to commit
+        status_check = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True
+        )
+        if status_check.stdout.strip():
+            output.append("Creating initial commit...")
+            subprocess.run(["git", "add", "."], cwd=str(repo_path), capture_output=True)
+            commit_res = subprocess.run(
+                ["git", "commit", "-m", "Initial commit"],
+                cwd=str(repo_path),
+                capture_output=True,
+                text=True
+            )
+            if commit_res.returncode != 0:
+                return f"❌ Failed to create initial commit: {commit_res.stderr}"
+            output.append("✅ Initial commit created")
+        else:
+            return "❌ No files to commit. Add some files first."
+    
+    # Create GitHub repository
+    output.append(f"\nCreating GitHub repository: {name}...")
+    visibility = "--public" if public else "--private"
+    
+    gh_cmd = ["gh", "repo", "create", name, visibility, "--source", str(repo_path), "--push"]
+    if description:
+        gh_cmd.extend(["--description", description])
+    
+    create_res = subprocess.run(
+        gh_cmd,
+        cwd=str(repo_path),
+        capture_output=True,
+        text=True,
+        timeout=60
+    )
+    
+    if create_res.returncode != 0:
+        # Check if repo already exists
+        if "already exists" in create_res.stderr.lower():
+            output.append("⚠️  Repository already exists on GitHub")
+            output.append("Adding remote and pushing...")
+            
+            # Get GitHub username
+            whoami = subprocess.run(
+                ["gh", "api", "user", "--jq", ".login"],
+                capture_output=True,
+                text=True
+            )
+            username = whoami.stdout.strip()
+            
+            # Add remote if not exists
+            remote_check = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                cwd=str(repo_path),
+                capture_output=True,
+                text=True
+            )
+            if remote_check.returncode != 0:
+                remote_url = f"https://github.com/{username}/{name}.git"
+                subprocess.run(
+                    ["git", "remote", "add", "origin", remote_url],
+                    cwd=str(repo_path),
+                    capture_output=True
+                )
+                output.append(f"✅ Remote added: {remote_url}")
+            
+            # Push
+            push_res = subprocess.run(
+                ["git", "push", "-u", "origin", "main"],
+                cwd=str(repo_path),
+                capture_output=True,
+                text=True
+            )
+            if push_res.returncode != 0:
+                # Try master branch
+                push_res = subprocess.run(
+                    ["git", "push", "-u", "origin", "master"],
+                    cwd=str(repo_path),
+                    capture_output=True,
+                    text=True
+                )
+            if push_res.returncode == 0:
+                output.append("✅ Pushed to GitHub")
+            else:
+                output.append(f"⚠️  Push failed: {push_res.stderr}")
+        else:
+            return f"❌ Failed to create GitHub repo: {create_res.stderr}"
+    else:
+        output.append("✅ GitHub repository created and pushed!")
+        if create_res.stdout.strip():
+            output.append(f"   URL: {create_res.stdout.strip()}")
+    
     return "\n".join(output)
 
 
