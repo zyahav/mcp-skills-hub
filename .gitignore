@@ -52,4 +52,9 @@ feature-*/
 
 # MacOS
 .DS_Store
-.env
+
+# Node
+node_modules/
+
+# Test files
+cli_gen_test.txt
