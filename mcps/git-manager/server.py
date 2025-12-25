@@ -106,6 +106,11 @@ def branch_exists(branch: str, cwd: Path = None) -> bool:
     result = run_git(["show-ref", "--verify", f"refs/heads/{branch}"], cwd)
     return result.returncode == 0
 
+def prune_worktrees() -> None:
+    """Prune stale worktree references to prevent git errors."""
+    logger.debug("Pruning stale worktree references...")
+    run_git(["worktree", "prune"])
+
 
 # ============== ARGUMENT MODELS ==============
 
@@ -269,6 +274,9 @@ async def call_tool(name: str, arguments: dict):
 
 def do_list_worktrees() -> str:
     """List all worktrees."""
+    # Prune stale references first for accurate listing
+    prune_worktrees()
+    
     output = ["=== GIT WORKTREES ===\n"]
     
     # Get worktree list
@@ -463,6 +471,9 @@ def do_release_merge(push: bool, ff_only: bool) -> str:
     """Merge dev into main for release."""
     output = ["=== RELEASE MERGE: dev → main ===\n"]
     
+    # Prune stale worktree references first
+    prune_worktrees()
+    
     # Define main worktree path
     MAIN_WORKTREE = REPO_ROOT / "mcp-skills-hub-main"
     
@@ -509,6 +520,9 @@ def do_release_merge(push: bool, ff_only: bool) -> str:
 def do_tag_release(version: str, message: Optional[str], push: bool) -> str:
     """Create a release tag on main."""
     output = [f"=== TAGGING RELEASE: {version} ===\n"]
+    
+    # Prune stale worktree references first
+    prune_worktrees()
     
     # Define main worktree path
     MAIN_WORKTREE = REPO_ROOT / "mcp-skills-hub-main"
