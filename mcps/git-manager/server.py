@@ -76,6 +76,37 @@ logger.info(f"Using REPO_ROOT: {REPO_ROOT}")
 DEFAULT_TIMEOUT = int(os.environ.get("GIT_MANAGER_TIMEOUT", "60"))
 
 
+def find_dev_worktree() -> Path:
+    """Find the dev worktree dynamically from git worktree list."""
+    result = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=str(REPO_ROOT),
+        text=True,
+        capture_output=True,
+        timeout=30
+    )
+    if result.returncode != 0:
+        logger.warning("Could not list worktrees to find dev")
+        return REPO_ROOT
+    
+    for line in result.stdout.split('\n'):
+        if line.startswith('worktree '):
+            path = Path(line.split(' ', 1)[1])
+            if '-dev' in path.name or path.name.endswith('-dev'):
+                return path
+    
+    # Fallback: look for *-dev directory in REPO_ROOT
+    for child in REPO_ROOT.iterdir():
+        if child.is_dir() and child.name.endswith('-dev'):
+            return child
+    
+    return REPO_ROOT
+
+# For backwards compatibility - evaluated at startup
+DEV_WORKTREE = find_dev_worktree()
+logger.info(f"Dev worktree: {DEV_WORKTREE}")
+
+
 # ============== HELPER FUNCTIONS ==============
 
 def run_git(args: List[str], cwd: Path = None, timeout: int = None) -> subprocess.CompletedProcess:
