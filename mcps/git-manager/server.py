@@ -10,13 +10,21 @@ Directory Layout Expected:
     ├── mcp-skills-hub-dev/            <- dev worktree
     ├── mcp-skills-hub-feature-X/      <- feature worktrees
     └── ...
+
+Environment Variables:
+    GIT_MANAGER_REPO_ROOT  - Override auto-detected repo root path
+    GIT_MANAGER_TIMEOUT    - Git command timeout in seconds (default: 60)
+    GIT_MANAGER_LOG_LEVEL  - Logging level: DEBUG, INFO, WARNING, ERROR (default: INFO)
 """
 
 import asyncio
 import json
+import logging
 import os
 import shutil
 import subprocess
+import sys
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -24,29 +32,58 @@ from mcp.server import Server
 from mcp.types import Tool, TextContent
 from pydantic import BaseModel, Field, field_validator
 
+# ============== LOGGING SETUP ==============
+
+LOG_LEVEL = os.environ.get("GIT_MANAGER_LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stderr)]
+)
+logger = logging.getLogger("git_manager")
+
 # Initialize server
 SKILL_NAME = os.environ.get("MCP_SKILL_NAME", "git_manager")
 server = Server(SKILL_NAME)
 
-# Path resolution
+# ============== PATH RESOLUTION ==============
+# Can be overridden via GIT_MANAGER_REPO_ROOT environment variable
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 MCPS_DIR = SCRIPT_DIR.parent
 DEV_WORKTREE = MCPS_DIR.parent  # mcp-skills-hub-dev
-REPO_ROOT = DEV_WORKTREE.parent  # main worktree (mcp-skills-hub-monorepo)
+
+# Allow override via environment variable for flexibility
+_env_repo_root = os.environ.get("GIT_MANAGER_REPO_ROOT")
+if _env_repo_root:
+    REPO_ROOT = Path(_env_repo_root).resolve()
+    logger.info(f"Using REPO_ROOT from environment: {REPO_ROOT}")
+else:
+    REPO_ROOT = DEV_WORKTREE.parent  # main worktree (mcp-skills-hub-monorepo)
+    logger.debug(f"Auto-detected REPO_ROOT: {REPO_ROOT}")
+
+# Configurable timeout
+DEFAULT_TIMEOUT = int(os.environ.get("GIT_MANAGER_TIMEOUT", "60"))
 
 
 # ============== HELPER FUNCTIONS ==============
 
-def run_git(args: List[str], cwd: Path = None, timeout: int = 60) -> subprocess.CompletedProcess:
+def run_git(args: List[str], cwd: Path = None, timeout: int = None) -> subprocess.CompletedProcess:
     """Run a git command and return the result."""
+    if timeout is None:
+        timeout = DEFAULT_TIMEOUT
     cmd = ["git"] + args
-    return subprocess.run(
+    logger.debug(f"Running: {' '.join(cmd)} in {cwd or REPO_ROOT}")
+    result = subprocess.run(
         cmd,
         cwd=str(cwd or REPO_ROOT),
         text=True,
         capture_output=True,
         timeout=timeout,
     )
+    if result.returncode != 0:
+        logger.warning(f"Git command failed: {' '.join(cmd)} -> {result.stderr.strip()}")
+    return result
 
 def format_result(proc: subprocess.CompletedProcess) -> str:
     """Format command result for output."""
