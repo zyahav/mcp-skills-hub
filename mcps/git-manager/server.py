@@ -6,13 +6,15 @@ Tools for managing git worktrees, feature branches, and release workflow.
 Designed for a main/dev/feature branch strategy with sibling worktrees.
 
 Directory Layout Expected:
-    mcp-skills-hub-monorepo/           <- REPO_ROOT (main branch)
-    ├── mcp-skills-hub-dev/            <- dev worktree
-    ├── mcp-skills-hub-feature-X/      <- feature worktrees
+    your-project-monorepo/             <- REPO_ROOT (set via env var)
+    ├── your-project-dev/              <- dev worktree
+    ├── your-project-feature-X/        <- feature worktrees
     └── ...
 
-Environment Variables:
-    GIT_MANAGER_REPO_ROOT  - Override auto-detected repo root path
+Environment Variables (REQUIRED):
+    GIT_MANAGER_REPO_ROOT  - Path to monorepo root directory (REQUIRED)
+    
+Environment Variables (Optional):
     GIT_MANAGER_TIMEOUT    - Git command timeout in seconds (default: 60)
     GIT_MANAGER_LOG_LEVEL  - Logging level: DEBUG, INFO, WARNING, ERROR (default: INFO)
 """
@@ -47,20 +49,28 @@ SKILL_NAME = os.environ.get("MCP_SKILL_NAME", "git_manager")
 server = Server(SKILL_NAME)
 
 # ============== PATH RESOLUTION ==============
-# Can be overridden via GIT_MANAGER_REPO_ROOT environment variable
+# GIT_MANAGER_REPO_ROOT is REQUIRED - no auto-detection
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-MCPS_DIR = SCRIPT_DIR.parent
-DEV_WORKTREE = MCPS_DIR.parent  # mcp-skills-hub-dev
-
-# Allow override via environment variable for flexibility
 _env_repo_root = os.environ.get("GIT_MANAGER_REPO_ROOT")
-if _env_repo_root:
-    REPO_ROOT = Path(_env_repo_root).resolve()
-    logger.info(f"Using REPO_ROOT from environment: {REPO_ROOT}")
-else:
-    REPO_ROOT = DEV_WORKTREE.parent  # main worktree (mcp-skills-hub-monorepo)
-    logger.debug(f"Auto-detected REPO_ROOT: {REPO_ROOT}")
+if not _env_repo_root:
+    logger.error("GIT_MANAGER_REPO_ROOT environment variable is required but not set.")
+    logger.error("Set it to your monorepo root path in your MCP configuration.")
+    logger.error("Example: /path/to/your-project-monorepo")
+    print(json.dumps({
+        "error": "GIT_MANAGER_REPO_ROOT environment variable is required",
+        "help": "Set GIT_MANAGER_REPO_ROOT to your monorepo root path in your MCP configuration"
+    }), file=sys.stderr)
+    sys.exit(1)
+
+REPO_ROOT = Path(_env_repo_root).resolve()
+if not REPO_ROOT.exists():
+    logger.error(f"GIT_MANAGER_REPO_ROOT path does not exist: {REPO_ROOT}")
+    sys.exit(1)
+if not (REPO_ROOT / ".git").exists() and not any(REPO_ROOT.glob("*/.git")):
+    logger.error(f"GIT_MANAGER_REPO_ROOT does not appear to be a git repository: {REPO_ROOT}")
+    sys.exit(1)
+
+logger.info(f"Using REPO_ROOT: {REPO_ROOT}")
 
 # Configurable timeout
 DEFAULT_TIMEOUT = int(os.environ.get("GIT_MANAGER_TIMEOUT", "60"))

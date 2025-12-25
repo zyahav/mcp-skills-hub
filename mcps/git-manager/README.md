@@ -1,31 +1,46 @@
 # Git Manager MCP
 
-A Model Context Protocol (MCP) server for managing Git workflows in a monorepo with nested worktrees.
+A Model Context Protocol (MCP) server for managing Git workflows with worktrees.
 
-## Configuration
+Designed for a main/dev/feature branch strategy with sibling worktrees.
 
-### Environment Variables
+## Setup (REQUIRED)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GIT_MANAGER_REPO_ROOT` | (auto-detected) | Override the repository root path |
-| `GIT_MANAGER_TIMEOUT` | `60` | Git command timeout in seconds |
-| `GIT_MANAGER_LOG_LEVEL` | `INFO` | Logging level: DEBUG, INFO, WARNING, ERROR |
+You **must** set `GIT_MANAGER_REPO_ROOT` to point to your monorepo root directory.
 
-### Example with custom config
+### Claude Desktop Configuration
 
 ```json
 {
-  "git-manager": {
-    "command": "/bin/bash",
-    "args": ["/path/to/mcps/git-manager/wrapper.sh"],
-    "env": {
-      "GIT_MANAGER_TIMEOUT": "120",
-      "GIT_MANAGER_LOG_LEVEL": "DEBUG"
+  "mcpServers": {
+    "git-manager": {
+      "command": "/bin/bash",
+      "args": ["/path/to/mcp-skills-hub/mcps/git-manager/wrapper.sh"],
+      "env": {
+        "GIT_MANAGER_REPO_ROOT": "/path/to/your-project-monorepo"
+      }
     }
   }
 }
 ```
+
+### Expected Directory Structure
+
+```
+your-project-monorepo/           <- GIT_MANAGER_REPO_ROOT points here
+├── your-project-main/           <- main worktree (or bare repo)
+├── your-project-dev/            <- dev worktree  
+├── your-project-feature-X/      <- feature worktrees (temporary)
+└── ...
+```
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GIT_MANAGER_REPO_ROOT` | **Yes** | - | Path to monorepo root directory |
+| `GIT_MANAGER_TIMEOUT` | No | `60` | Git command timeout in seconds |
+| `GIT_MANAGER_LOG_LEVEL` | No | `INFO` | DEBUG, INFO, WARNING, ERROR |
 
 ## Tools
 
@@ -61,7 +76,6 @@ Stages changes, commits, and pushes in a specific worktree.
   - `worktree` (string, optional): Worktree name (default: dev)
   - `push` (boolean, default=true): Push to origin
 
-
 ### `sync_env`
 Copies `.env` from `dev` to all feature worktrees.
 
@@ -90,19 +104,33 @@ Get usage help for a specific tool or list all tools.
 
 ```bash
 # 1. Create a feature branch
-git-manager create_feature feature="add-login"
+create_feature feature="add-login"
 
 # 2. Make changes in the feature worktree...
 
 # 3. Commit and push
-git-manager git_add_commit_push message="feat: add login page" worktree="feature-add-login"
+git_add_commit_push message="feat: add login page"
 
 # 4. Merge to dev
-git-manager merge_feature feature="add-login" push=true delete_branch=true
+merge_feature feature="add-login" push=true delete_branch=true
 
 # 5. Release to main
-git-manager release_merge push=true
+release_merge push=true
 
 # 6. Tag the release
-git-manager tag_release version="v1.0.0"
+tag_release version="v1.0.0"
 ```
+
+## Troubleshooting
+
+### "GIT_MANAGER_REPO_ROOT environment variable is required"
+
+You must set this in your MCP configuration. See Setup section above.
+
+### "path does not exist"
+
+Check that `GIT_MANAGER_REPO_ROOT` points to a valid directory.
+
+### Logs
+
+Check `/tmp/git_manager_wrapper.log` for detailed logs.
