@@ -109,6 +109,67 @@ logger.info(f"Dev worktree: {DEV_WORKTREE}")
 
 # ============== HELPER FUNCTIONS ==============
 
+def add_to_ci_monitor(repo_path: Path) -> Optional[str]:
+    """Add a repository to ci-monitor watch list after push.
+    
+    Extracts owner/repo from git remote and calls ci-monitor add.
+    Returns status message or None if ci-monitor not available.
+    """
+    try:
+        # Get remote URL
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(repo_path),
+            text=True,
+            capture_output=True,
+            timeout=10
+        )
+        if result.returncode != 0:
+            return None
+        
+        remote_url = result.stdout.strip()
+        
+        # Extract owner/repo from URL
+        # Handles: https://github.com/owner/repo.git or git@github.com:owner/repo.git
+        import re
+        match = re.search(r'github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$', remote_url)
+        if not match:
+            return None
+        
+        owner_repo = f"{match.group(1)}/{match.group(2)}"
+        
+        # Check if ci-monitor is available
+        ci_monitor_paths = [
+            Path.home() / ".local" / "bin" / "ci-monitor",
+            Path("/usr/local/bin/ci-monitor"),
+        ]
+        
+        ci_monitor = None
+        for p in ci_monitor_paths:
+            if p.exists():
+                ci_monitor = p
+                break
+        
+        if not ci_monitor:
+            return None
+        
+        # Add to ci-monitor (idempotent - won't duplicate)
+        result = subprocess.run(
+            [str(ci_monitor), "add", owner_repo],
+            text=True,
+            capture_output=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            return f"📡 CI Monitor: watching {owner_repo}"
+        return None
+        
+    except Exception as e:
+        logger.debug(f"ci-monitor integration skipped: {e}")
+        return None
+
+
 def run_git(args: List[str], cwd: Path = None, timeout: int = None) -> subprocess.CompletedProcess:
     """Run a git command and return the result."""
     if timeout is None:
@@ -851,6 +912,10 @@ def do_git_add_commit_push(message: Optional[str], worktree: Optional[str], push
              output.append("\n⚠️ Push failed (check upstream/conflicts)")
         else:
              output.append("\n✅ Pushed successfully")
+             # Auto-add to ci-monitor
+             ci_status = add_to_ci_monitor(wt_path)
+             if ci_status:
+                 output.append(ci_status)
 
     return "\n".join(output)
 
@@ -987,6 +1052,10 @@ def do_create_repo(path: str, name: str, public: bool = True, description: Optio
                 )
             if push_res.returncode == 0:
                 output.append("✅ Pushed to GitHub")
+                # Auto-add to ci-monitor
+                ci_status = add_to_ci_monitor(repo_path)
+                if ci_status:
+                    output.append(ci_status)
             else:
                 output.append(f"⚠️  Push failed: {push_res.stderr}")
         else:
@@ -995,6 +1064,10 @@ def do_create_repo(path: str, name: str, public: bool = True, description: Optio
         output.append("✅ GitHub repository created and pushed!")
         if create_res.stdout.strip():
             output.append(f"   URL: {create_res.stdout.strip()}")
+        # Auto-add to ci-monitor
+        ci_status = add_to_ci_monitor(repo_path)
+        if ci_status:
+            output.append(ci_status)
     
     return "\n".join(output)
 
