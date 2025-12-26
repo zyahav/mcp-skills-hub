@@ -162,6 +162,7 @@ class EmptyArgs(BaseModel):
 class FeatureArgs(BaseModel):
     """Arguments for feature operations."""
     feature: str = Field(description="Feature name/slug (e.g., 'add-logging', 'fix-bug-123')")
+    repo_path: Optional[str] = Field(default=None, description="Path to repository (default: uses GIT_MANAGER_REPO_ROOT monorepo)")
     
     @field_validator("feature")
     @classmethod
@@ -182,6 +183,7 @@ class MergeFeatureArgs(FeatureArgs):
 
 class ReleaseMergeArgs(BaseModel):
     """Arguments for release merge (dev -> main)."""
+    repo_path: Optional[str] = Field(default=None, description="Path to repository (default: uses GIT_MANAGER_REPO_ROOT monorepo)")
     push: bool = Field(default=False, description="Push main to origin after merge")
     ff_only: bool = Field(default=True, description="Use --ff-only (fail if not fast-forward)")
 
@@ -245,19 +247,19 @@ TOOLS = {
         "schema": StatusArgs,
     },
     "create_feature": {
-        "description": "Create a new feature branch and worktree from dev. Creates mcp-skills-hub-feature-<name> directory.",
+        "description": "Create a new feature branch. For monorepo: creates worktree. For standalone repos (with repo_path): creates simple branch.",
         "schema": FeatureArgs,
     },
     "delete_feature": {
-        "description": "Delete a feature worktree and optionally its branch.",
+        "description": "Delete a feature branch. For monorepo: also removes worktree. For standalone repos (with repo_path): deletes branch only.",
         "schema": FeatureArgs,
     },
     "merge_feature": {
-        "description": "Merge a feature branch into dev. Optionally push and/or delete the feature branch.",
+        "description": "Merge a feature branch. For monorepo: merges into dev. For standalone repos (with repo_path): merges into main.",
         "schema": MergeFeatureArgs,
     },
     "release_merge": {
-        "description": "Merge dev into main for release. Use ff_only=true (default) for clean releases.",
+        "description": "Merge dev into main for release (monorepo workflow only). Use ff_only=true (default) for clean releases.",
         "schema": ReleaseMergeArgs,
     },
     "tag_release": {
@@ -310,16 +312,16 @@ async def call_tool(name: str, arguments: dict):
             result = do_get_status(args.worktree)
         elif name == "create_feature":
             args = FeatureArgs(**arguments)
-            result = do_create_feature(args.feature)
+            result = do_create_feature(args.feature, args.repo_path)
         elif name == "delete_feature":
             args = FeatureArgs(**arguments)
-            result = do_delete_feature(args.feature)
+            result = do_delete_feature(args.feature, args.repo_path)
         elif name == "merge_feature":
             args = MergeFeatureArgs(**arguments)
-            result = do_merge_feature(args.feature, args.push, args.delete_branch)
+            result = do_merge_feature(args.feature, args.push, args.delete_branch, args.repo_path)
         elif name == "release_merge":
             args = ReleaseMergeArgs(**arguments)
-            result = do_release_merge(args.push, args.ff_only)
+            result = do_release_merge(args.push, args.ff_only, args.repo_path)
         elif name == "tag_release":
             args = TagArgs(**arguments)
             result = do_tag_release(args.version, args.message, args.push)
@@ -429,9 +431,48 @@ def do_get_status(worktree: Optional[str] = None) -> str:
     return "\n".join(output)
 
 
-def do_create_feature(feature: str) -> str:
-    """Create a new feature branch and worktree."""
+def do_create_feature(feature: str, repo_path: Optional[str] = None) -> str:
+    """Create a new feature branch. Uses worktrees for monorepo, simple branches for standalone repos."""
     branch_name = f"feature/{feature}"
+    
+    # Determine if using monorepo (worktrees) or standalone repo (simple branches)
+    if repo_path:
+        # Standalone repo mode - simple branch workflow
+        repo = Path(repo_path).resolve()
+        if not repo.exists():
+            return f"❌ Repository path does not exist: {repo}"
+        if not (repo / ".git").exists():
+            return f"❌ Not a git repository: {repo}"
+        
+        output = [f"=== CREATING FEATURE: {feature} ===\n"]
+        output.append(f"Repository: {repo}")
+        
+        # Check if branch already exists
+        if branch_exists(branch_name, repo):
+            return f"❌ Branch already exists: {branch_name}"
+        
+        # Get current branch to know base
+        current = get_current_branch(repo)
+        base_branch = "main" if current == "" else current
+        
+        # Fetch latest
+        output.append(f"Fetching latest from origin...")
+        run_git(["fetch", "origin"], repo)
+        
+        # Create and checkout new branch
+        output.append(f"Creating branch {branch_name} from {base_branch}...")
+        result = run_git(["checkout", "-b", branch_name], repo)
+        if result.returncode != 0:
+            return f"❌ Failed to create branch:\n{format_result(result)}"
+        
+        output.append(f"\n✅ Feature branch created!")
+        output.append(f"   Branch: {branch_name}")
+        output.append(f"   Repository: {repo}")
+        output.append(f"\n💡 cd {repo}")
+        
+        return "\n".join(output)
+    
+    # Monorepo mode - use worktrees (original behavior)
     worktree_path = REPO_ROOT / f"mcp-skills-hub-feature-{feature}"
     
     output = [f"=== CREATING FEATURE: {feature} ===\n"]
@@ -468,9 +509,37 @@ def do_create_feature(feature: str) -> str:
     return "\n".join(output)
 
 
-def do_delete_feature(feature: str) -> str:
-    """Delete a feature worktree and branch."""
+def do_delete_feature(feature: str, repo_path: Optional[str] = None) -> str:
+    """Delete a feature branch. For monorepo also removes worktree."""
     branch_name = f"feature/{feature}"
+    
+    if repo_path:
+        # Standalone repo mode
+        repo = Path(repo_path).resolve()
+        if not repo.exists():
+            return f"❌ Repository path does not exist: {repo}"
+        
+        output = [f"=== DELETING FEATURE: {feature} ===\n"]
+        
+        # Switch to main first if on the feature branch
+        current = get_current_branch(repo)
+        if current == branch_name:
+            run_git(["checkout", "main"], repo)
+            output.append("Switched to main branch")
+        
+        # Delete branch
+        if branch_exists(branch_name, repo):
+            result = run_git(["branch", "-D", branch_name], repo)
+            if result.returncode == 0:
+                output.append(f"✅ Deleted branch: {branch_name}")
+            else:
+                output.append(f"⚠️ Branch deletion: {format_result(result)}")
+        else:
+            output.append(f"ℹ️  Branch not found: {branch_name}")
+        
+        return "\n".join(output)
+    
+    # Monorepo mode - remove worktree and branch
     worktree_path = REPO_ROOT / f"mcp-skills-hub-feature-{feature}"
     
     output = [f"=== DELETING FEATURE: {feature} ===\n"]
@@ -501,10 +570,53 @@ def do_delete_feature(feature: str) -> str:
     return "\n".join(output)
 
 
-def do_merge_feature(feature: str, push: bool, delete_branch: bool) -> str:
-    """Merge a feature branch into dev."""
+def do_merge_feature(feature: str, push: bool, delete_branch: bool, repo_path: Optional[str] = None) -> str:
+    """Merge a feature branch into main (standalone) or dev (monorepo)."""
     branch_name = f"feature/{feature}"
     
+    if repo_path:
+        # Standalone repo mode - merge feature into main
+        repo = Path(repo_path).resolve()
+        if not repo.exists():
+            return f"❌ Repository path does not exist: {repo}"
+        
+        output = [f"=== MERGING FEATURE: {feature} → main ===\n"]
+        output.append(f"Repository: {repo}")
+        
+        # Check branch exists
+        if not branch_exists(branch_name, repo):
+            return f"❌ Branch not found: {branch_name}"
+        
+        # Switch to main and update
+        output.append("Switching to main and pulling...")
+        run_git(["checkout", "main"], repo)
+        run_git(["pull", "origin", "main"], repo)
+        
+        # Merge feature
+        output.append(f"Merging {branch_name}...")
+        result = run_git(["merge", branch_name, "--no-ff", "-m", f"Merge {branch_name} into main"], repo)
+        output.append(format_result(result))
+        
+        if result.returncode != 0:
+            output.append("\n❌ Merge failed - resolve conflicts manually")
+            return "\n".join(output)
+        
+        # Push if requested
+        if push:
+            output.append("\nPushing main to origin...")
+            push_result = run_git(["push", "origin", "main"], repo)
+            output.append(format_result(push_result))
+        
+        # Delete branch if requested
+        if delete_branch:
+            output.append(f"\nDeleting {branch_name}...")
+            run_git(["branch", "-D", branch_name], repo)
+            output.append(f"✅ Deleted branch: {branch_name}")
+        
+        output.append("\n✅ Merge complete!")
+        return "\n".join(output)
+    
+    # Monorepo mode - merge feature into dev
     output = [f"=== MERGING FEATURE: {feature} → dev ===\n"]
     
     # Check branch exists
@@ -540,8 +652,12 @@ def do_merge_feature(feature: str, push: bool, delete_branch: bool) -> str:
     return "\n".join(output)
 
 
-def do_release_merge(push: bool, ff_only: bool) -> str:
-    """Merge dev into main for release."""
+def do_release_merge(push: bool, ff_only: bool, repo_path: Optional[str] = None) -> str:
+    """Merge dev into main for release. Only applicable to monorepo workflow."""
+    
+    if repo_path:
+        return "ℹ️  release_merge is for monorepo workflow (dev → main).\nFor standalone repos, use merge_feature with push=true to merge feature → main."
+    
     output = ["=== RELEASE MERGE: dev → main ===\n"]
     
     # Prune stale worktree references first
